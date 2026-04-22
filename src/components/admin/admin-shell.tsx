@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BellRing, CalendarDays, LayoutDashboard, Map, UtensilsCrossed, UsersRound } from "lucide-react";
+import { BellRing, CalendarDays, LayoutDashboard, Map, UtensilsCrossed, UserRoundCog, UsersRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -7,6 +7,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/bookings", label: "Booking", icon: UsersRound },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/staff", label: "Nhân viên", icon: UserRoundCog },
   { href: "/waiter-requests", label: "Gọi nhân viên", icon: BellRing },
   { href: "/tables", label: "Bàn / Khu vực", icon: Map },
   { href: "/services", label: "Dịch vụ", icon: UtensilsCrossed },

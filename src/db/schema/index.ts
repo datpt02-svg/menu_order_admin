@@ -21,6 +21,10 @@ export const bookingStatusEnum = pgEnum("booking_status", [
 
 export const waiterStatusEnum = pgEnum("waiter_status", ["new", "in_progress", "done"]);
 export const tableStatusEnum = pgEnum("table_status", ["available", "reserved", "occupied", "cleaning"]);
+export const staffRoleEnum = pgEnum("staff_role", ["service", "kitchen", "cashier", "manager", "support"]);
+export const staffStatusEnum = pgEnum("staff_status", ["active", "inactive"]);
+export const staffAssignmentStatusEnum = pgEnum("staff_assignment_status", ["assigned", "confirmed", "absent"]);
+export const staffAssignmentEventTypeEnum = pgEnum("staff_assignment_event_type", ["created", "moved", "resized", "reassigned", "status_changed"]);
 
 export const zones = pgTable("zones", {
   id: serial("id").primaryKey(),
@@ -94,6 +98,52 @@ export const services = pgTable("services", {
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const staffMembers = pgTable("staff_members", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 40 }).notNull().unique(),
+  fullName: varchar("full_name", { length: 160 }).notNull(),
+  phone: varchar("phone", { length: 40 }).notNull(),
+  role: staffRoleEnum("role").default("service").notNull(),
+  status: staffStatusEnum("status").default("active").notNull(),
+  preferredZoneId: integer("preferred_zone_id").references(() => zones.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const staffShifts = pgTable("staff_shifts", {
+  id: serial("id").primaryKey(),
+  shiftDate: varchar("shift_date", { length: 20 }).notNull(),
+  startTime: varchar("start_time", { length: 20 }).notNull(),
+  endTime: varchar("end_time", { length: 20 }).notNull(),
+  label: varchar("label", { length: 120 }).notNull(),
+  zoneId: integer("zone_id").references(() => zones.id, { onDelete: "set null" }),
+  headcountRequired: integer("headcount_required"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const staffAssignments = pgTable("staff_assignments", {
+  id: serial("id").primaryKey(),
+  staffMemberId: integer("staff_member_id").references(() => staffMembers.id, { onDelete: "cascade" }).notNull(),
+  staffShiftId: integer("staff_shift_id").references(() => staffShifts.id, { onDelete: "cascade" }).notNull(),
+  zoneId: integer("zone_id").references(() => zones.id, { onDelete: "set null" }),
+  assignmentRole: staffRoleEnum("assignment_role"),
+  status: staffAssignmentStatusEnum("status").default("assigned").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const staffAssignmentEvents = pgTable("staff_assignment_events", {
+  id: serial("id").primaryKey(),
+  staffAssignmentId: integer("staff_assignment_id").references(() => staffAssignments.id, { onDelete: "cascade" }).notNull(),
+  eventType: staffAssignmentEventTypeEnum("event_type").notNull(),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const localeKeys = pgTable("locale_keys", {

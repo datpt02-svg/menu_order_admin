@@ -6,6 +6,10 @@ import {
   localeKeys,
   localeTranslations,
   services,
+  staffAssignmentEvents,
+  staffAssignments,
+  staffMembers,
+  staffShifts,
   tables,
   waiterRequests,
   zones,
@@ -149,6 +153,165 @@ async function main() {
 
   for (const service of serviceValues) {
     await db.insert(services).values(service).onConflictDoNothing();
+  }
+
+  const staffMemberValues = [
+    {
+      code: "ST-001",
+      fullName: "Phạm Thu Trang",
+      phone: "0909001001",
+      role: "manager" as const,
+      status: "active" as const,
+      preferredZoneId: zoneBySlug["bbq-deck-a"]?.id ?? null,
+      notes: "Phụ trách ca tối và xử lý booking đông khách.",
+    },
+    {
+      code: "ST-002",
+      fullName: "Ngô Minh Quân",
+      phone: "0909001002",
+      role: "service" as const,
+      status: "active" as const,
+      preferredZoneId: zoneBySlug["bbq-deck-a"]?.id ?? null,
+      notes: "Ưu tiên khu BBQ Deck A, mạnh xử lý nhóm đông.",
+    },
+    {
+      code: "ST-003",
+      fullName: "Trần Mỹ Linh",
+      phone: "0909001003",
+      role: "service" as const,
+      status: "active" as const,
+      preferredZoneId: zoneBySlug["cafe-garden"]?.id ?? null,
+      notes: "Theo dõi khu cafe và hỗ trợ khách lẻ.",
+    },
+    {
+      code: "ST-004",
+      fullName: "Lý Hoàng Phúc",
+      phone: "0909001004",
+      role: "kitchen" as const,
+      status: "active" as const,
+      preferredZoneId: null,
+      notes: "Phụ trách line nướng giờ cao điểm.",
+    },
+    {
+      code: "ST-005",
+      fullName: "Bùi Thanh Hà",
+      phone: "0909001005",
+      role: "cashier" as const,
+      status: "active" as const,
+      preferredZoneId: null,
+      notes: "Cuối tuần hỗ trợ thanh toán và hóa đơn.",
+    },
+    {
+      code: "ST-006",
+      fullName: "Đỗ Gia Hân",
+      phone: "0909001006",
+      role: "support" as const,
+      status: "inactive" as const,
+      preferredZoneId: zoneBySlug["bbq-deck-b"]?.id ?? null,
+      notes: "Tạm nghỉ tuần này.",
+    },
+  ];
+
+  for (const staffMember of staffMemberValues) {
+    await db.insert(staffMembers).values(staffMember).onConflictDoNothing();
+  }
+
+  const staffMemberRows = await db.select().from(staffMembers);
+  const staffByCode = Object.fromEntries(staffMemberRows.map((member) => [member.code, member]));
+
+  const staffShiftValues = [
+    {
+      shiftDate: "2026-04-22",
+      startTime: "17:00",
+      endTime: "21:00",
+      label: "Ca tối BBQ Deck A",
+      zoneId: zoneBySlug["bbq-deck-a"]?.id ?? null,
+      headcountRequired: 2,
+      notes: "Ưu tiên khách đặt bàn sinh nhật và nhóm đông.",
+    },
+    {
+      shiftDate: "2026-04-22",
+      startTime: "17:30",
+      endTime: "21:30",
+      label: "Ca tối Cafe Garden",
+      zoneId: zoneBySlug["cafe-garden"]?.id ?? null,
+      headcountRequired: 1,
+      notes: "Theo dõi khách đặt bàn cặp đôi và khu cafe.",
+    },
+    {
+      shiftDate: "2026-04-22",
+      startTime: "18:00",
+      endTime: "22:00",
+      label: "Line bếp peak tối",
+      zoneId: null,
+      headcountRequired: 1,
+      notes: "Chuẩn bị combo nướng cho slot 19h-20h30.",
+    },
+    {
+      shiftDate: "2026-04-23",
+      startTime: "16:30",
+      endTime: "20:30",
+      label: "Ca chiều BBQ Deck B",
+      zoneId: zoneBySlug["bbq-deck-b"]?.id ?? null,
+      headcountRequired: 1,
+      notes: "Theo dõi bàn đặt trước cuối tuần sớm.",
+    },
+  ];
+
+  for (const shift of staffShiftValues) {
+    await db.insert(staffShifts).values(shift);
+  }
+
+  const staffShiftRows = await db.select().from(staffShifts);
+  const shiftByLabel = Object.fromEntries(staffShiftRows.map((shift) => [`${shift.shiftDate}-${shift.label}`, shift]));
+
+  const staffAssignmentValues = [
+    {
+      staffMemberId: staffByCode["ST-001"]?.id,
+      staffShiftId: shiftByLabel["2026-04-22-Ca tối BBQ Deck A"]?.id,
+      zoneId: zoneBySlug["bbq-deck-a"]?.id ?? null,
+      assignmentRole: "manager" as const,
+      status: "confirmed" as const,
+      notes: "Giữ vai trò điều phối khu nướng.",
+    },
+    {
+      staffMemberId: staffByCode["ST-002"]?.id,
+      staffShiftId: shiftByLabel["2026-04-22-Ca tối BBQ Deck A"]?.id,
+      zoneId: zoneBySlug["bbq-deck-a"]?.id ?? null,
+      assignmentRole: "service" as const,
+      status: "assigned" as const,
+      notes: "Phụ trách các bàn 4-6 khách.",
+    },
+    {
+      staffMemberId: staffByCode["ST-003"]?.id,
+      staffShiftId: shiftByLabel["2026-04-22-Ca tối Cafe Garden"]?.id,
+      zoneId: zoneBySlug["cafe-garden"]?.id ?? null,
+      assignmentRole: "service" as const,
+      status: "confirmed" as const,
+      notes: "Ưu tiên bàn cặp đôi và khách đến sớm.",
+    },
+    {
+      staffMemberId: staffByCode["ST-004"]?.id,
+      staffShiftId: shiftByLabel["2026-04-22-Line bếp peak tối"]?.id,
+      zoneId: null,
+      assignmentRole: "kitchen" as const,
+      status: "assigned" as const,
+      notes: "Chuẩn bị combo nướng và món thêm.",
+    },
+  ].filter((assignment) => assignment.staffMemberId && assignment.staffShiftId);
+
+  for (const assignment of staffAssignmentValues) {
+    await db.insert(staffAssignments).values(assignment);
+  }
+
+  const staffAssignmentRows = await db.select().from(staffAssignments);
+
+  for (const assignment of staffAssignmentRows) {
+    await db.insert(staffAssignmentEvents).values({
+      staffAssignmentId: assignment.id,
+      eventType: "created",
+      payload: { source: "seed" },
+    });
   }
 
   const localeKeyValues = [

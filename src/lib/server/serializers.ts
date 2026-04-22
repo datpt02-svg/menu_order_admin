@@ -1,4 +1,13 @@
-import type { bookings, localeKeys, localeTranslations, services, tables, waiterRequests, zones } from "@/db/schema";
+import type {
+  bookings,
+  services,
+  staffAssignments,
+  staffMembers,
+  staffShifts,
+  tables,
+  waiterRequests,
+  zones,
+} from "@/db/schema";
 
 export type BookingRow = typeof bookings.$inferSelect & {
   zoneName?: string | null;
@@ -15,6 +24,30 @@ export type TableRow = typeof tables.$inferSelect & {
 };
 
 export type ServiceRow = typeof services.$inferSelect;
+
+export type StaffMemberRow = typeof staffMembers.$inferSelect & {
+  preferredZoneName?: string | null;
+};
+
+export type StaffShiftRow = typeof staffShifts.$inferSelect & {
+  zoneName?: string | null;
+};
+
+export type StaffAssignmentRow = typeof staffAssignments.$inferSelect & {
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  shiftLabel: string;
+  shiftZoneId: number | null;
+  shiftZoneName?: string | null;
+  staffCode: string;
+  staffFullName: string;
+  staffPhone: string;
+  staffRole: typeof staffMembers.$inferSelect.role;
+  staffStatus: typeof staffMembers.$inferSelect.status;
+  staffPreferredZoneId: number | null;
+  staffPreferredZoneName?: string | null;
+};
 
 export type LocaleRow = {
   id: number;
