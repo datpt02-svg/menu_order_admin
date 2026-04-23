@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
@@ -13,8 +13,10 @@ import {
   staffMembers,
   staffShifts,
   tables,
+  waiterRequests,
   zones,
 } from "@/db/schema";
+import { saveBooking, saveWaiterRequest, buildServiceSlug } from "@/lib/server/booking-service";
 
 function valueOf(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -112,6 +114,376 @@ function isTruthyValue(value: string) {
   return value === "true" || value === "1" || value === "on" || value === "active";
 }
 
+type ValidationResult = {
+  ok: boolean;
+  fieldErrors?: Record<string, string>;
+  formError?: string;
+};
+
+const VALID_SERVICE_CATEGORIES = new Set(["BBQ", "Cafe", "Dịch vụ", "Sự kiện"]);
+const VALID_BOOKING_STATUSES = new Set(["pending", "confirmed", "seated", "completed", "cancelled", "no_show"]);
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const IMAGE_PATH_PATTERN = /^(\/[^\s]+|https?:\/\/[^\s]+)$/i;
+const PHONE_ALLOWED_PATTERN = /^[0-9+().\s-]+$/;
+
+type ServiceValidationPayload = {
+  name: string;
+  slug: string;
+  category: string;
+  description: string | null;
+  priceLabel: string;
+  imagePath: string | null;
+  visible: boolean;
+  bookingEnabled: boolean;
+  zoneSlug: string | null;
+  nameI18n: Record<string, string> | null;
+  descriptionI18n: Record<string, string> | null;
+  priceLabelI18n: Record<string, string> | null;
+  sortOrder: number;
+  updatedAt: Date;
+};
+
+type BookingValidationPayload = {
+  id?: number;
+  code?: string;
+  customerName: string;
+  customerPhone: string;
+  bookingDate: string;
+  bookingTime: string;
+  guestCount: number;
+  zoneSlug: string | null;
+  tableCode: string | null;
+  status?: typeof bookings.$inferInsert.status;
+  depositSlipPath?: string | null;
+  depositReviewStatus?: typeof bookings.$inferInsert.depositReviewStatus;
+  depositReviewedAt?: Date | null;
+  depositReviewNote?: string | null;
+  note: string | null;
+};
+
+const SERVICE_ORDER_PARKED_VALUE = 0;
+
+function clampServicePosition(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+async function listServiceSortSnapshot(executor: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]) {
+  return executor
+    .select({ id: services.id, sortOrder: services.sortOrder })
+    .from(services)
+    .orderBy(asc(services.sortOrder), asc(services.name), asc(services.id));
+}
+
+async function normalizeServiceSortOrder(executor: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]) {
+  const rows = await listServiceSortSnapshot(executor);
+  const updates = rows.flatMap((row, index) => {
+    const nextSortOrder = index + 1;
+    if (row.sortOrder === nextSortOrder) return [];
+    return [{ id: row.id, sortOrder: nextSortOrder }];
+  });
+
+  if (updates.length === 0) {
+    return rows.map((row, index) => ({ id: row.id, sortOrder: index + 1 }));
+  }
+
+  for (const update of updates) {
+    await executor
+      .update(services)
+      .set({ sortOrder: update.sortOrder, updatedAt: new Date() })
+      .where(eq(services.id, update.id));
+  }
+
+  return rows.map((row, index) => ({ id: row.id, sortOrder: index + 1 }));
+}
+
+async function shiftServiceOrder(
+  executor: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  payload: ServiceValidationPayload,
+  serviceId?: number,
+) {
+  const normalizedRows = await normalizeServiceSortOrder(executor);
+  const currentCount = normalizedRows.length;
+  const requestedSortOrder = Number.isInteger(payload.sortOrder) ? payload.sortOrder : currentCount + 1;
+
+  if (!serviceId) {
+    const targetSortOrder = clampServicePosition(requestedSortOrder || currentCount + 1, 1, currentCount + 1);
+
+    await executor
+      .update(services)
+      .set({ sortOrder: sql`${services.sortOrder} + 1`, updatedAt: new Date() })
+      .where(gte(services.sortOrder, targetSortOrder));
+
+    await executor.insert(services).values({ ...payload, sortOrder: targetSortOrder });
+    return;
+  }
+
+  const currentRow = normalizedRows.find((row) => row.id === serviceId);
+  if (!currentRow) {
+    throw new Error("service-not-found");
+  }
+
+  const targetSortOrder = clampServicePosition(requestedSortOrder || currentRow.sortOrder, 1, currentCount);
+  const nextPayload = { ...payload, sortOrder: targetSortOrder };
+
+  if (targetSortOrder === currentRow.sortOrder) {
+    await executor.update(services).set(nextPayload).where(eq(services.id, serviceId));
+    return;
+  }
+
+  await executor
+    .update(services)
+    .set({ sortOrder: SERVICE_ORDER_PARKED_VALUE, updatedAt: new Date() })
+    .where(eq(services.id, serviceId));
+
+  if (targetSortOrder < currentRow.sortOrder) {
+    await executor
+      .update(services)
+      .set({ sortOrder: sql`${services.sortOrder} + 1`, updatedAt: new Date() })
+      .where(and(gte(services.sortOrder, targetSortOrder), lte(services.sortOrder, currentRow.sortOrder - 1)));
+  } else {
+    await executor
+      .update(services)
+      .set({ sortOrder: sql`${services.sortOrder} - 1`, updatedAt: new Date() })
+      .where(and(gte(services.sortOrder, currentRow.sortOrder + 1), lte(services.sortOrder, targetSortOrder)));
+  }
+
+  await executor.update(services).set(nextPayload).where(eq(services.id, serviceId));
+}
+
+async function deleteAndCompactServiceOrder(executor: Parameters<Parameters<typeof db.transaction>[0]>[0], serviceId: number) {
+  const normalizedRows = await normalizeServiceSortOrder(executor);
+  const currentRow = normalizedRows.find((row) => row.id === serviceId);
+  if (!currentRow) return;
+
+  await executor.delete(services).where(eq(services.id, serviceId));
+  await executor
+    .update(services)
+    .set({ sortOrder: sql`${services.sortOrder} - 1`, updatedAt: new Date() })
+    .where(gte(services.sortOrder, currentRow.sortOrder + 1));
+}
+
+function buildValidationResult(fieldErrors: Record<string, string>, formError?: string): ValidationResult {
+  return {
+    ok: false,
+    fieldErrors,
+    formError,
+  };
+}
+
+function trimOptionalString(value: string, maxLength: number) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+}
+
+function normalizePhone(value: string) {
+  return value.replace(/[().\s-]+/g, "").trim();
+}
+
+function isValidDateString(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime());
+}
+
+function isValidTimeString(value: string) {
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+}
+
+async function validateServiceForm(formData: FormData): Promise<{ result: ValidationResult; payload?: ServiceValidationPayload; id: number }> {
+  const id = numberValue(formData, "id");
+  const name = valueOf(formData, "name");
+  const rawSlug = valueOf(formData, "slug");
+  const slug = rawSlug.toLowerCase();
+  const category = valueOf(formData, "category") || "Dịch vụ";
+  const description = trimOptionalString(valueOf(formData, "description"), 2000);
+  const priceLabel = valueOf(formData, "priceLabel");
+  const imagePath = trimOptionalString(valueOf(formData, "imagePath"), 500);
+  const zoneSlug = trimOptionalString(valueOf(formData, "zoneSlug"), 120);
+  const sortOrderRaw = valueOf(formData, "sortOrder");
+  const sortOrder = Number(sortOrderRaw || "1");
+  const localeKeys = ["vi", "en", "zh", "ko", "ja"] as const;
+  const buildI18n = (prefix: string, maxLength: number): Record<string, string> | null => {
+    const entries = localeKeys.reduce<Array<[string, string]>>((result, locale) => {
+      const value = trimOptionalString(valueOf(formData, `${prefix}_${locale}`), maxLength);
+      if (value) {
+        result.push([locale, value]);
+      }
+      return result;
+    }, []);
+    return entries.length ? Object.fromEntries(entries) : null;
+  };
+  const nameI18n = buildI18n("nameI18n", 160);
+  const descriptionI18n = buildI18n("descriptionI18n", 2000);
+  const priceLabelI18n = buildI18n("priceLabelI18n", 120);
+
+  const fieldErrors: Record<string, string> = {};
+
+  if (name.length < 2) {
+    fieldErrors.name = "Tên dịch vụ phải có ít nhất 2 ký tự.";
+  }
+  if (!slug) {
+    fieldErrors.slug = "Slug là bắt buộc.";
+  } else if (!SLUG_PATTERN.test(slug)) {
+    fieldErrors.slug = "Slug chỉ được chứa chữ thường, số và dấu gạch ngang.";
+  }
+  if (!priceLabel) {
+    fieldErrors.priceLabel = "Giá hiển thị là bắt buộc.";
+  }
+  if (!VALID_SERVICE_CATEGORIES.has(category)) {
+    fieldErrors.category = "Danh mục không hợp lệ.";
+  }
+  if (!Number.isInteger(sortOrder) || sortOrder < 1) {
+    fieldErrors.sortOrder = "Vị trí hiển thị phải là số nguyên lớn hơn hoặc bằng 1.";
+  }
+  if (imagePath && !IMAGE_PATH_PATTERN.test(imagePath)) {
+    fieldErrors.imagePath = "Ảnh phải là đường dẫn nội bộ bắt đầu bằng / hoặc URL http/https hợp lệ.";
+  }
+  if (zoneSlug && !SLUG_PATTERN.test(zoneSlug)) {
+    fieldErrors.zoneSlug = "Zone slug không hợp lệ.";
+  }
+
+  if (!fieldErrors.slug && slug) {
+    const rows = await db
+      .select({ id: services.id })
+      .from(services)
+      .where(id ? and(eq(services.slug, slug), ne(services.id, id)) : eq(services.slug, slug))
+      .limit(1);
+    if (rows[0]) {
+      fieldErrors.slug = "Slug này đã tồn tại.";
+    }
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại thông tin dịch vụ."), id };
+  }
+
+  return {
+    result: { ok: true },
+    id,
+    payload: {
+      name,
+      slug,
+      category,
+      description,
+      priceLabel,
+      imagePath,
+      visible: valueOf(formData, "visible") !== "hidden",
+      bookingEnabled: valueOf(formData, "bookingEnabled") !== "disabled",
+      zoneSlug,
+      nameI18n,
+      descriptionI18n,
+      priceLabelI18n,
+      sortOrder,
+      updatedAt: new Date(),
+    },
+  };
+}
+
+async function validateBookingForm(formData: FormData): Promise<{ result: ValidationResult; payload?: BookingValidationPayload }> {
+  const code = trimOptionalString(valueOf(formData, "code"), 80) || undefined;
+  const customerName = valueOf(formData, "customerName");
+  const customerPhone = valueOf(formData, "customerPhone");
+  const bookingDate = valueOf(formData, "bookingDate");
+  const bookingTime = valueOf(formData, "bookingTime");
+  const guestCountRaw = valueOf(formData, "guestCount");
+  const guestCount = Number(guestCountRaw);
+  const zoneSlug = trimOptionalString(valueOf(formData, "zoneSlug"), 120);
+  const tableCode = trimOptionalString(valueOf(formData, "tableCode"), 80)?.toUpperCase() || null;
+  const statusValue = valueOf(formData, "status") || "pending";
+  const depositSlipPath = trimOptionalString(valueOf(formData, "depositSlipPath"), 500);
+  const depositReviewStatusValue = valueOf(formData, "depositReviewStatus") || (depositSlipPath ? "submitted" : "not_submitted");
+  const depositReviewNote = trimOptionalString(valueOf(formData, "depositReviewNote"), 1000);
+  const note = trimOptionalString(valueOf(formData, "note"), 1000);
+  const fieldErrors: Record<string, string> = {};
+
+  if (customerName.length < 2) {
+    fieldErrors.customerName = "Tên khách hàng phải có ít nhất 2 ký tự.";
+  }
+  if (!customerPhone) {
+    fieldErrors.customerPhone = "Số điện thoại là bắt buộc.";
+  } else if (!PHONE_ALLOWED_PATTERN.test(customerPhone) || normalizePhone(customerPhone).length < 9 || normalizePhone(customerPhone).length > 15) {
+    fieldErrors.customerPhone = "Số điện thoại không hợp lệ.";
+  }
+  if (!isValidDateString(bookingDate)) {
+    fieldErrors.bookingDate = "Ngày đặt không hợp lệ.";
+  }
+  if (!isValidTimeString(bookingTime)) {
+    fieldErrors.bookingTime = "Giờ đặt không hợp lệ.";
+  }
+  if (!Number.isInteger(guestCount) || guestCount < 1) {
+    fieldErrors.guestCount = "Số lượng khách phải là số nguyên lớn hơn hoặc bằng 1.";
+  }
+  if (!VALID_BOOKING_STATUSES.has(statusValue)) {
+    fieldErrors.status = "Trạng thái booking không hợp lệ.";
+  }
+  if (depositSlipPath && !IMAGE_PATH_PATTERN.test(depositSlipPath)) {
+    fieldErrors.depositSlipPath = "Ảnh bill phải là đường dẫn nội bộ bắt đầu bằng / hoặc URL http/https hợp lệ.";
+  }
+  if (!["not_submitted", "submitted", "approved", "rejected"].includes(depositReviewStatusValue)) {
+    fieldErrors.depositReviewStatus = "Trạng thái duyệt bill không hợp lệ.";
+  }
+  if (depositReviewStatusValue === "submitted" && !depositSlipPath) {
+    fieldErrors.depositSlipPath = "Cần ảnh bill cọc trước khi gửi chờ duyệt.";
+  }
+  if (depositReviewStatusValue === "rejected" && !depositReviewNote) {
+    fieldErrors.depositReviewNote = "Cần nhập lý do từ chối bill cọc.";
+  }
+
+  let resolvedZoneSlug: string | null = zoneSlug;
+  if (resolvedZoneSlug === "all") resolvedZoneSlug = null;
+
+  if (resolvedZoneSlug) {
+    const zoneRows = await db.select({ id: zones.id }).from(zones).where(eq(zones.slug, resolvedZoneSlug)).limit(1);
+    if (!zoneRows[0]) {
+      fieldErrors.zoneSlug = "Khu vực không tồn tại.";
+    }
+  }
+
+  if (tableCode) {
+    const tableRows = await db
+      .select({ id: tables.id, zoneId: tables.zoneId })
+      .from(tables)
+      .where(eq(tables.code, tableCode))
+      .limit(1);
+    const table = tableRows[0];
+    if (!table) {
+      fieldErrors.tableCode = "Bàn không tồn tại.";
+    } else if (resolvedZoneSlug) {
+      const zoneRows = await db.select({ id: zones.id }).from(zones).where(eq(zones.slug, resolvedZoneSlug)).limit(1);
+      const zone = zoneRows[0];
+      if (zone && table.zoneId && table.zoneId !== zone.id) {
+        fieldErrors.tableCode = "Bàn không thuộc khu vực đã chọn.";
+      }
+    }
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại thông tin booking.") };
+  }
+
+  return {
+    result: { ok: true },
+    payload: {
+      id: numberValue(formData, "id") || undefined,
+      code,
+      customerName,
+      customerPhone,
+      bookingDate,
+      bookingTime,
+      guestCount,
+      zoneSlug: resolvedZoneSlug,
+      tableCode,
+      status: statusValue as typeof bookings.$inferInsert.status,
+      depositSlipPath,
+      depositReviewStatus: depositReviewStatusValue as typeof bookings.$inferInsert.depositReviewStatus,
+      depositReviewedAt: depositReviewStatusValue === "approved" || depositReviewStatusValue === "rejected" ? new Date() : null,
+      depositReviewNote,
+      note,
+    },
+  };
+}
+
 async function revalidateStaffPages() {
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
@@ -154,71 +526,150 @@ function hasTimeOverlap(
   });
 }
 
-export async function saveBookingAction(formData: FormData) {
-  const id = numberValue(formData, "id");
-  const status = valueOf(formData, "status") as typeof bookings.$inferInsert.status;
-  const payload = {
-    code: valueOf(formData, "code") || buildCode("BK"),
-    customerName: valueOf(formData, "customerName"),
-    customerPhone: valueOf(formData, "customerPhone"),
-    bookingDate: valueOf(formData, "bookingDate"),
-    bookingTime: valueOf(formData, "bookingTime"),
-    guestCount: numberValue(formData, "guestCount", 1),
-    zoneId: await findZoneIdBySlug(valueOf(formData, "zoneSlug")),
-    tableId: await findTableIdByCode(valueOf(formData, "tableCode")),
-    status: status || "pending",
-    note: optionalValue(formData, "note"),
-    updatedAt: new Date(),
-  };
-
-  if (id) {
-    await db.update(bookings).set(payload).where(eq(bookings.id, id));
-    await db.insert(bookingStatusHistory).values({ bookingId: id, status: payload.status, note: payload.note });
-  } else {
-    const inserted = await db.insert(bookings).values(payload).returning({ id: bookings.id });
-    const bookingId = inserted[0]?.id;
-    if (bookingId) {
-      await db.insert(bookingStatusHistory).values({ bookingId, status: payload.status, note: payload.note });
-    }
+export async function saveBookingAction(formData: FormData): Promise<ValidationResult> {
+  const { result, payload } = await validateBookingForm(formData);
+  if (!result.ok || !payload) {
+    return result;
   }
+
+  await saveBooking(payload);
 
   revalidatePath("/dashboard");
   revalidatePath("/bookings");
   revalidatePath("/calendar");
+  return { ok: true };
 }
 
-export async function saveServiceAction(formData: FormData) {
+export async function reviewBookingDepositAction(formData: FormData): Promise<ValidationResult> {
   const id = numberValue(formData, "id");
-  const name = valueOf(formData, "name");
-  const payload = {
-    name,
-    slug: valueOf(formData, "slug") || slugify(name) || buildCode("service").toLowerCase(),
-    category: valueOf(formData, "category") || "Dịch vụ",
-    description: optionalValue(formData, "description"),
-    priceLabel: valueOf(formData, "priceLabel") || "Liên hệ",
-    imagePath: optionalValue(formData, "imagePath"),
-    visible: valueOf(formData, "visible") !== "hidden",
-    sortOrder: numberValue(formData, "sortOrder", 0),
-    updatedAt: new Date(),
-  };
-
-  if (id) {
-    await db.update(services).set(payload).where(eq(services.id, id));
-  } else {
-    await db.insert(services).values(payload);
+  if (!id) {
+    return { ok: false, formError: "Không tìm thấy booking cần duyệt bill cọc." };
   }
+
+  const decision = valueOf(formData, "decision");
+  const depositReviewNote = trimOptionalString(valueOf(formData, "depositReviewNote"), 1000);
+  if (decision !== "approved" && decision !== "rejected") {
+    return { ok: false, formError: "Quyết định duyệt bill cọc không hợp lệ." };
+  }
+  if (decision === "rejected" && !depositReviewNote) {
+    return { ok: false, fieldErrors: { depositReviewNote: "Cần nhập lý do từ chối bill cọc." } };
+  }
+
+  const bookingRows = await db
+    .select({
+      id: bookings.id,
+      code: bookings.code,
+      status: bookings.status,
+      depositSlipPath: bookings.depositSlipPath,
+      zoneId: bookings.zoneId,
+      tableId: bookings.tableId,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, id))
+    .limit(1);
+  const booking = bookingRows[0];
+  if (!booking) {
+    return { ok: false, formError: "Booking không tồn tại." };
+  }
+  if (!booking.depositSlipPath) {
+    return { ok: false, formError: "Booking này chưa có bill cọc để duyệt." };
+  }
+
+  const nextStatus = decision === "approved" ? "confirmed" : booking.status;
+  const reviewedAt = new Date();
+
+  await db
+    .update(bookings)
+    .set({
+      status: nextStatus,
+      depositReviewStatus: decision,
+      depositReviewedAt: reviewedAt,
+      depositReviewNote: decision === "rejected" ? depositReviewNote : null,
+      updatedAt: reviewedAt,
+    })
+    .where(eq(bookings.id, id));
+
+  await db.insert(bookingStatusHistory).values({
+    bookingId: id,
+    status: nextStatus,
+    note: decision === "approved" ? "Admin đã xác nhận bill cọc." : `Admin từ chối bill cọc${depositReviewNote ? `: ${depositReviewNote}` : "."}`,
+  });
+
+  const zoneRows = booking.zoneId
+    ? await db.select({ name: zones.name }).from(zones).where(eq(zones.id, booking.zoneId)).limit(1)
+    : [];
+  const tableRows = booking.tableId
+    ? await db.select({ code: tables.code }).from(tables).where(eq(tables.id, booking.tableId)).limit(1)
+    : [];
+
+  const { broadcastRealtimeEvent, REALTIME_EVENTS } = await import("@/lib/server/realtime-events");
+  broadcastRealtimeEvent(REALTIME_EVENTS.bookingUpdated, {
+    id,
+    code: booking.code,
+    status: nextStatus,
+    zoneName: zoneRows[0]?.name ?? null,
+    tableCode: tableRows[0]?.code ?? null,
+    updatedAt: reviewedAt.toISOString(),
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/bookings");
+  revalidatePath("/calendar");
+  return { ok: true };
+}
+
+export async function saveServiceAction(formData: FormData): Promise<ValidationResult> {
+  const { result, payload, id } = await validateServiceForm(formData);
+  if (!result.ok || !payload) {
+    return result;
+  }
+
+  await db.transaction(async (tx) => {
+    await shiftServiceOrder(tx, payload, id || undefined);
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/services");
+  return { ok: true };
 }
 
 export async function deleteServiceAction(formData: FormData) {
   const id = numberValue(formData, "id");
   if (!id) return;
 
-  await db.delete(services).where(eq(services.id, id));
+  await db.transaction(async (tx) => {
+    await deleteAndCompactServiceOrder(tx, id);
+  });
   revalidatePath("/dashboard");
   revalidatePath("/services");
+}
+
+export async function saveWaiterRequestAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  await saveWaiterRequest({
+    id: id || undefined,
+    code: valueOf(formData, "code") || undefined,
+    zoneId: numberValue(formData, "zoneId") || undefined,
+    zoneSlug: valueOf(formData, "zoneSlug") || null,
+    tableId: numberValue(formData, "tableId") || undefined,
+    tableCode: valueOf(formData, "tableCode") || null,
+    need: valueOf(formData, "need"),
+    note: optionalValue(formData, "note"),
+    status: (valueOf(formData, "status") || undefined) as typeof waiterRequests.$inferInsert.status | undefined,
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/waiter-requests");
+}
+
+export async function deleteBookingAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return;
+
+  await db.delete(bookings).where(eq(bookings.id, id));
+  revalidatePath("/dashboard");
+  revalidatePath("/bookings");
+  revalidatePath("/calendar");
 }
 
 export async function saveStaffMemberAction(formData: FormData) {

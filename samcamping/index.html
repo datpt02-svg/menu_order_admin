@@ -1,0 +1,234 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sam Camping Digital Menu</title>
+    <meta
+      name="description"
+      content="MVP web app menu digital b&#xE1;m s&#xE1;t design Sam Camping."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Charm:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Hachi+Maru+Pop&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Coiny&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <section class="phone-frame">
+        <header class="hero">
+          <div class="hero__cover">
+            <div class="hero__scrim"></div>
+            <h1>Sam Camping</h1>
+          </div>
+          <div class="hero__badge" aria-hidden="true">
+            <img src="./assets/logosamcamping.png" alt="Sam Camping logo" />
+          </div>
+        </header>
+
+        <div class="content">
+          <section class="brand-story">
+            <p id="brand-story-text"></p>
+          </section>
+
+          <section class="info-card" id="info-trigger" role="button" tabindex="0" aria-haspopup="dialog">
+            <div class="info-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 10.2v5.3"></path>
+                <circle cx="12" cy="7.4" r="1.1" class="fill"></circle>
+              </svg>
+            </div>
+            <div class="info-card__body">
+              <strong id="info-title">Info</strong>
+              <p id="info-description">Wi-Fi, Phone, Facebook and more</p>
+            </div>
+            <button class="info-card__action" type="button" aria-label="Xem th&#xEA;m">
+              <svg viewBox="0 0 24 24">
+                <path d="m9 6 6 6-6 6"></path>
+              </svg>
+            </button>
+          </section>
+
+          <section class="category-section">
+            <h2 id="category-heading">Ch&#x1ECD;n danh m&#x1EE5;c</h2>
+            <div class="category-list" id="category-list"></div>
+          </section>
+
+          <section class="menu-section" id="menu-root" aria-live="polite"></section>
+        </div>
+
+        <section id="product-screen" class="product-screen" aria-live="polite"></section>
+
+        <aside class="bottom-nav">
+          <button class="nav-fab" id="scroll-top" type="button" aria-label="L&#xEA;n &#x111;&#x1EA7;u trang">
+            <svg viewBox="0 0 24 24">
+              <path d="m6 14 6-6 6 6"></path>
+            </svg>
+          </button>
+          <div class="bottom-nav__bar">
+            <button class="nav-chip is-active" id="language-trigger" type="button" aria-haspopup="dialog">
+              <i class="fa-solid fa-language nav-chip__fa-icon" aria-hidden="true"></i>
+              <span id="language-label">Ti&#x1EBF;ng Vi&#x1EC7;t</span>
+            </button>
+            <span class="nav-divider" aria-hidden="true"></span>
+            <button class="nav-chip" type="button" id="booking-trigger" aria-haspopup="dialog">
+              <i class="fa-regular fa-calendar-check nav-chip__fa-icon" aria-hidden="true"></i>
+              <span id="booking-label">&#x110;&#x1EB7;t b&#xE0;n</span>
+            </button>
+            <span class="nav-divider" aria-hidden="true"></span>
+            <button class="nav-icon" type="button" aria-label="G&#x1ECD;i nh&#xE2;n vi&#xEA;n" id="call-waiter-trigger">
+              <i class="fa-regular fa-bell" aria-hidden="true"></i>
+            </button>
+            <span class="nav-divider" aria-hidden="true"></span>
+            <button class="nav-icon" type="button" aria-label="L&#x1ECB;ch s&#x1EED;" id="history-trigger">
+              <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+            </button>
+            <span class="nav-divider" aria-hidden="true"></span>
+            <button class="nav-icon" type="button" aria-label="T&#xEC;m ki&#x1EBF;m">
+              <svg viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="5.5"></circle>
+                <path d="m15.2 15.2 4.3 4.3"></path>
+              </svg>
+            </button>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="language-modal" class="modal modal--compact">
+      <form method="dialog" class="modal__sheet">
+        <button class="modal__close" aria-label="&#x110;&#xF3;ng ch&#x1ECD;n ng&#xF4;n ng&#x1EEF;">&#x00D7;</button>
+        <div class="language-sheet">
+          <h3 id="language-modal-title">Ch&#x1ECD;n ng&#xF4;n ng&#x1EEF;</h3>
+          <div id="language-options" class="language-options"></div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="info-modal" class="modal modal--sheet">
+      <form method="dialog" class="modal__sheet modal__sheet--info">
+        <button class="modal__close" aria-label="&#x110;&#xF3;ng th&#xF4;ng tin">&#x00D7;</button>
+        <div class="info-sheet">
+          <div class="info-sheet__handle" aria-hidden="true"></div>
+          <h3 class="info-sheet__title">Sam Camping</h3>
+          <div class="info-sheet__list">
+            <a class="info-sheet__item" href="javascript:void(0)">
+              <span class="info-sheet__left">
+                <i class="fa-solid fa-wifi"></i>
+                <span>sampcamping</span>
+              </span>
+              <span class="info-sheet__right">
+                <i class="fa-regular fa-copy"></i>
+              </span>
+            </a>
+            <a class="info-sheet__item" href="https://maps.app.goo.gl/fJqCFSFbbkPi4fih9" target="_blank" rel="noreferrer">
+              <span class="info-sheet__left">
+                <i class="fa-solid fa-location-dot"></i>
+                <span id="info-maps-label">Google Maps</span>
+              </span>
+              <span class="info-sheet__right">&#8250;</span>
+            </a>
+            <a class="info-sheet__item" href="tel:+849680881">
+              <span class="info-sheet__left">
+                <i class="fa-solid fa-phone"></i>
+                <span>+849680881</span>
+              </span>
+              <span class="info-sheet__right">&#8250;</span>
+            </a>
+            <a class="info-sheet__item" href="https://facebook.com" target="_blank" rel="noreferrer">
+              <span class="info-sheet__left">
+                <i class="fa-brands fa-facebook-f"></i>
+                <span id="info-facebook-label">Facebook</span>
+              </span>
+              <span class="info-sheet__right">&#8250;</span>
+            </a>
+            <a class="info-sheet__item" href="https://tiktok.com" target="_blank" rel="noreferrer">
+              <span class="info-sheet__left">
+                <i class="fa-brands fa-tiktok"></i>
+                <span id="info-tiktok-label">Tiktok</span>
+              </span>
+              <span class="info-sheet__right">&#8250;</span>
+            </a>
+            <button class="info-sheet__item info-sheet__item--button" type="button" id="zalo-trigger">
+              <span class="info-sheet__left">
+                <i class="fa-solid fa-comments"></i>
+                <span id="info-zalo-label">K&#x1EBF;t n&#x1ED1;i Zalo</span>
+              </span>
+              <span class="info-sheet__right">&#8250;</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="zalo-modal" class="modal modal--compact">
+      <form method="dialog" class="modal__sheet modal__sheet--zalo">
+        <button class="modal__close" aria-label="&#x110;&#xF3;ng m&#xE3; QR Zalo">&#x00D7;</button>
+        <div class="zalo-sheet">
+          <div class="zalo-sheet__badge">Zalo</div>
+          <img class="zalo-sheet__qr" src="./assets/zalo-qr.jpg" alt="Sam Camping Zalo QR" />
+          <h3 class="zalo-sheet__title" id="zalo-modal-title">Sam Camping</h3>
+          <p class="zalo-sheet__desc" id="zalo-modal-desc">Anh/ch&#x1ECB; k&#x1EBF;t b&#x1EA1;n Zalo v&#x1EDB;i Sam &#x111;&#x1EC3; &#x111;&#x1B0;&#x1EE3;c t&#x1B0; v&#x1EA5;n nhanh v&#xE0; h&#x1ED7; tr&#x1EE3; t&#x1ED1;t h&#x1A1;n nh&#xE9; &#x1EA1;.</p>
+          <div class="zalo-sheet__actions">
+            <a class="booking-button--ghost zalo-sheet__link" href="./assets/zalo-qr.jpg" target="_blank" rel="noreferrer" id="zalo-open-link">M&#x1EDF; &#x1EA3;nh QR</a>
+            <a class="booking-button zalo-sheet__link" href="./assets/zalo-qr.jpg" download="sam-camping-zalo-qr.jpg" id="zalo-download-link">L&#x1B0;u &#x1EA3;nh QR</a>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="booking-modal" class="modal modal--booking">
+      <form method="dialog" class="modal__sheet modal__sheet--booking">
+        <button class="modal__close" aria-label="&#x110;&#xF3;ng &#x111;&#x1EB7;t b&#xE0;n">&#x00D7;</button>
+        <div id="booking-flow"></div>
+      </form>
+    </dialog>
+
+    <dialog id="history-modal" class="modal modal--sheet">
+      <form method="dialog" class="modal__sheet modal__sheet--info">
+        <button class="modal__close" aria-label="&#x110;&#xF3;ng l&#x1ECB;ch s&#x1EED; booking">&#x00D7;</button>
+        <div class="info-sheet">
+          <div class="info-sheet__handle" aria-hidden="true"></div>
+          <h3 class="info-sheet__title history-sheet__title" id="history-modal-title">L&#x1ECB;ch &#x111;&#x1EB7;t b&#xE0;n</h3>
+          <div id="history-flow" class="history-flow"></div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="waiter-modal" class="modal modal--sheet">
+      <form method="dialog" class="modal__sheet modal__sheet--info">
+        <button class="modal__close" aria-label="&#x110;&#xF3;ng g&#x1ECD;i nh&#xE2;n vi&#xEA;n">&#x00D7;</button>
+        <div class="info-sheet">
+          <div class="info-sheet__handle" aria-hidden="true"></div>
+          <h3 class="info-sheet__title history-sheet__title" id="waiter-modal-title">G&#x1ECD;i nh&#xE2;n vi&#xEA;n</h3>
+          <div id="waiter-flow" class="waiter-flow"></div>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
+
+

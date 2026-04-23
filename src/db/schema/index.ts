@@ -19,6 +19,7 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "no_show",
 ]);
 
+export const depositReviewStatusEnum = pgEnum("deposit_review_status", ["not_submitted", "submitted", "approved", "rejected"]);
 export const waiterStatusEnum = pgEnum("waiter_status", ["new", "in_progress", "done"]);
 export const tableStatusEnum = pgEnum("table_status", ["available", "reserved", "occupied", "cleaning"]);
 export const staffRoleEnum = pgEnum("staff_role", ["service", "kitchen", "cashier", "manager", "support"]);
@@ -53,6 +54,10 @@ export const bookings = pgTable("bookings", {
   zoneId: integer("zone_id").references(() => zones.id, { onDelete: "set null" }),
   tableId: integer("table_id").references(() => tables.id, { onDelete: "set null" }),
   status: bookingStatusEnum("status").default("pending").notNull(),
+  depositSlipPath: text("deposit_slip_path"),
+  depositReviewStatus: depositReviewStatusEnum("deposit_review_status").default("not_submitted").notNull(),
+  depositReviewedAt: timestamp("deposit_reviewed_at"),
+  depositReviewNote: text("deposit_review_note"),
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -95,6 +100,11 @@ export const services = pgTable("services", {
   priceLabel: varchar("price_label", { length: 120 }).notNull(),
   imagePath: text("image_path"),
   visible: boolean("visible").default(true).notNull(),
+  bookingEnabled: boolean("booking_enabled").default(true).notNull(),
+  zoneSlug: varchar("zone_slug", { length: 120 }),
+  nameI18n: jsonb("name_i18n").$type<Record<string, string> | null>(),
+  descriptionI18n: jsonb("description_i18n").$type<Record<string, string> | null>(),
+  priceLabelI18n: jsonb("price_label_i18n").$type<Record<string, string> | null>(),
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

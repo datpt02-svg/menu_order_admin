@@ -12,6 +12,7 @@ import type {
 export type BookingRow = typeof bookings.$inferSelect & {
   zoneName?: string | null;
   tableCode?: string | null;
+  depositSlipUrl?: string | null;
 };
 
 export type WaiterRow = typeof waiterRequests.$inferSelect & {

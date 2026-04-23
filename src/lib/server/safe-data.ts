@@ -6,6 +6,7 @@ import {
 } from "@/lib/server/fallback-data";
 import {
   getBookings,
+  getBookingServices,
   getDashboardSnapshot,
   getServices,
   getStaffAssignments,
@@ -65,6 +66,14 @@ export async function safeTables() {
 export async function safeServices() {
   try {
     return { data: await getServices(), usingFallback: false };
+  } catch {
+    return { data: getFallbackDashboardSnapshot().services, usingFallback: true };
+  }
+}
+
+export async function safeBookingServices() {
+  try {
+    return { data: await getBookingServices(), usingFallback: false };
   } catch {
     return { data: getFallbackDashboardSnapshot().services, usingFallback: true };
   }

@@ -1,0 +1,1689 @@
+:root {
+  --page: #d7d6d8;
+  --mint: #dcefd6;
+  --mint-strong: #cde5c3;
+  --mint-deep: #6e9565;
+  --forest: #3f6f42;
+  --forest-dark: #26482b;
+  --text: #28432d;
+  --muted: #68806a;
+  --line: rgba(63, 111, 66, 0.12);
+  --white: #f8fff5;
+  --shadow: 0 16px 36px rgba(69, 91, 63, 0.14);
+  --frame-width: clamp(360px, 46vw, 520px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "Be Vietnam Pro", sans-serif;
+  background: var(--page);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+}
+
+.stage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+
+.phone-frame {
+  position: relative;
+  width: min(100%, var(--frame-width));
+  min-height: clamp(760px, 88vh, 1080px);
+  border-radius: 18px;
+  background: var(--mint);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), var(--shadow);
+  overflow: hidden;
+}
+
+.phone-frame.is-detail-view .hero,
+.phone-frame.is-detail-view .content,
+.phone-frame.is-detail-view .bottom-nav {
+  display: none;
+}
+
+.hero {
+  position: relative;
+}
+
+.hero__cover {
+  position: relative;
+  min-height: clamp(146px, 19vw, 220px);
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(180deg, rgba(12, 27, 18, 0.06), rgba(12, 27, 18, 0.52)),
+    url("./assets/sam-hero.jpg") center/cover;
+}
+
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6, 18, 8, 0.08), rgba(6, 18, 8, 0.3));
+}
+
+.hero h1 {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-family: "Hachi Maru Pop", "Be Vietnam Pro", cursive;
+  color: var(--white);
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.24);
+}
+
+.hero__badge {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(-28px, -2.8vw, -18px);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.hero__badge img {
+  width: clamp(74px, 9vw, 104px);
+  height: clamp(74px, 9vw, 104px);
+  display: block;
+  object-fit: cover;
+  filter: drop-shadow(0 6px 12px rgba(45, 82, 44, 0.16));
+}
+
+.content {
+  padding: clamp(42px, 5vw, 56px) clamp(14px, 3vw, 20px) 96px;
+}
+
+.brand-story {
+  margin-bottom: 24px;
+}
+
+.brand-story p {
+  margin: 0;
+  color: #203527;
+  font-family: "Charm", "Be Vietnam Pro", cursive;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.info-card {
+  display: grid;
+  grid-template-columns: clamp(18px, 2vw, 22px) 1fr clamp(18px, 2vw, 22px);
+  gap: 12px;
+  align-items: center;
+  padding: clamp(12px, 2vw, 16px) clamp(12px, 2vw, 16px);
+  border-radius: 14px;
+  background: rgba(238, 248, 233, 0.86);
+  border: 1px solid rgba(112, 153, 109, 0.12);
+  cursor: pointer;
+}
+
+.info-card__icon,
+.info-card__action {
+  width: clamp(18px, 2vw, 22px);
+  height: clamp(18px, 2vw, 22px);
+  display: grid;
+  place-items: center;
+  color: var(--forest);
+}
+
+.info-card__action {
+  border: 0;
+  background: transparent;
+}
+
+.info-card__icon svg,
+.info-card__action svg,
+.nav-chip--primary svg,
+.nav-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.info-card__icon .fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.info-card strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: clamp(1rem, 1.18vw, 1.12rem);
+  font-weight: 500;
+}
+
+.info-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(0.82rem, 0.98vw, 0.92rem);
+  line-height: 1.5;
+}
+
+.category-section,
+.menu-section {
+  margin-top: 18px;
+}
+
+.category-section h2,
+.menu-group h3 {
+  margin: 0 0 10px;
+  font-size: clamp(1rem, 1.25vw, 1.18rem);
+  font-weight: 700;
+  color: var(--forest);
+}
+
+.category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.category-chip {
+  max-width: 100%;
+  min-height: clamp(34px, 4vw, 40px);
+  padding: 0 clamp(12px, 2vw, 16px);
+  border: 0;
+  border-radius: 999px;
+  background: rgba(244, 250, 241, 0.9);
+  color: #4f6d52;
+  font-size: clamp(0.74rem, 0.95vw, 0.9rem);
+  font-weight: 500;
+}
+
+.category-chip.is-active {
+  background: var(--mint-strong);
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+.menu-group + .menu-group {
+  margin-top: 20px;
+}
+
+.menu-group p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: clamp(0.74rem, 0.92vw, 0.86rem);
+  line-height: 1.55;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.menu-card {
+  background: transparent;
+}
+
+.menu-card__image {
+  width: 100%;
+  aspect-ratio: 0.9;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+}
+
+.menu-card__title {
+  margin: 8px 0 4px;
+  font-family: "Coiny", "Be Vietnam Pro", cursive;
+  font-size: clamp(0.8rem, 1vw, 0.96rem);
+  font-weight: 400;
+  line-height: 1.35;
+  text-transform: none;
+  color: var(--forest-dark);
+}
+
+.menu-card__meta,
+.menu-card__desc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  color: var(--forest);
+  font-size: clamp(0.68rem, 0.88vw, 0.82rem);
+  line-height: 1.45;
+}
+
+.menu-card__desc {
+  display: block;
+  color: var(--muted);
+  min-height: 44px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.menu-card__price {
+  margin: 0;
+  font-size: clamp(0.96rem, 1.15vw, 1.12rem);
+  font-weight: 600;
+  color: var(--forest-dark);
+}
+
+.menu-card__button {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mint-deep);
+  font-size: clamp(0.7rem, 0.9vw, 0.82rem);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bottom-nav {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: transparent;
+}
+
+.product-screen {
+  display: none;
+  min-height: 100%;
+  background: var(--mint);
+}
+
+.phone-frame.is-detail-view .product-screen {
+  display: block;
+}
+
+.product-screen__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(233, 246, 226, 0.96);
+  color: var(--forest);
+}
+
+.product-screen__back,
+.product-screen__share {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.product-screen__back svg,
+.product-screen__share svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.product-screen__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--forest);
+}
+
+.product-screen__hero {
+  width: 100%;
+  aspect-ratio: 0.85;
+  background-size: cover;
+  background-position: center;
+}
+
+.product-screen__body {
+  display: grid;
+  gap: 12px;
+}
+
+.product-panel {
+  padding: 14px 16px 18px;
+  background: #e4f3dc;
+}
+
+.product-panel__eyebrow {
+  margin: 0 0 10px;
+  color: rgba(38, 72, 43, 0.76);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-panel__name {
+  margin: 0;
+  font-family: "Coiny", "Be Vietnam Pro", cursive;
+  font-size: 1.15rem;
+  font-weight: 400;
+  color: var(--forest);
+}
+
+.product-panel__note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.product-panel__description {
+  margin: 12px 0 0;
+  color: #4d6654;
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+
+.product-panel__price {
+  margin: 14px 0 0;
+  color: var(--forest-dark);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.product-panel__intro {
+  margin: 8px 0 0;
+  color: #5e7563;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.similar-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.similar-card {
+  border: 0;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+}
+
+.similar-card__image {
+  width: 100%;
+  aspect-ratio: 1.2;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+}
+
+.similar-card__body {
+  padding: 12px 0 0;
+}
+
+.similar-card__eyebrow {
+  margin: 0 0 8px;
+  color: rgba(38, 72, 43, 0.76);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.similar-card__name {
+  margin: 0;
+  font-family: "Coiny", "Be Vietnam Pro", cursive;
+  color: var(--forest);
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.similar-card__note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.similar-card__description {
+  margin: 10px 0 0;
+  color: #4d6654;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.similar-card__price {
+  margin: 12px 0 0;
+  color: var(--forest-dark);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.nav-fab {
+  width: clamp(42px, 4.8vw, 56px);
+  height: clamp(42px, 4.8vw, 56px);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(74, 126, 71, 0.96);
+  color: #f0f8ec;
+  box-shadow: 0 12px 24px rgba(45, 82, 44, 0.22);
+}
+
+.nav-fab svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.bottom-nav__bar {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(74, 126, 71, 0.92);
+  box-shadow: 0 10px 20px rgba(45, 82, 44, 0.18);
+}
+
+.nav-divider {
+  width: 1px;
+  height: 30px;
+  background: rgba(240, 248, 236, 0.28);
+}
+
+.nav-chip,
+.nav-icon {
+  height: clamp(34px, 4vw, 42px);
+  border: 0;
+  border-radius: 999px;
+  color: #f0f8ec;
+  background: transparent;
+}
+
+.nav-chip {
+  padding: 0 clamp(10px, 2vw, 16px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(0.74rem, 0.9vw, 0.86rem);
+  white-space: nowrap;
+}
+
+.nav-chip__fa-icon {
+  width: 18px;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+  color: currentColor;
+}
+
+#language-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-chip.is-active {
+  background: transparent;
+}
+
+.nav-icon {
+  width: clamp(34px, 4vw, 42px);
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.nav-icon .fa-solid,
+.nav-icon .fa-regular,
+.nav-icon .fa-brands {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.modal {
+  width: min(360px, calc(100% - 24px));
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.modal--compact {
+  width: min(320px, calc(100% - 24px));
+}
+
+.modal--sheet {
+  width: min(460px, calc(100% - 20px));
+  margin: auto auto 0;
+}
+
+.modal--booking {
+  width: min(440px, calc(100% - 20px));
+}
+
+.modal::backdrop {
+  background: rgba(18, 28, 18, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+.modal__sheet {
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #f4fbf0;
+  box-shadow: var(--shadow);
+}
+
+.modal__sheet--info {
+  padding: 12px 0 0;
+  border-radius: 28px 28px 0 0;
+}
+
+.modal__sheet--booking {
+  padding: 16px;
+  border-radius: 24px;
+}
+
+.modal__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--forest);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.language-sheet h3 {
+  margin: 0 0 14px;
+  color: var(--forest-dark);
+  font-size: 1rem;
+}
+
+.info-sheet__handle {
+  width: 44px;
+  height: 4px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: rgba(63, 111, 66, 0.18);
+}
+
+.info-sheet__title {
+  margin: 0;
+  padding: 0 20px 16px;
+  text-align: center;
+  font-family: "Hachi Maru Pop", "Be Vietnam Pro", cursive;
+  color: var(--forest);
+  font-size: 1.15rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.history-sheet__title {
+  font-family: "Charm", "Be Vietnam Pro", cursive;
+  font-weight: 700;
+}
+
+.info-sheet__list {
+  display: grid;
+}
+
+.info-sheet__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(63, 111, 66, 0.08);
+  color: var(--forest-dark);
+  text-decoration: none;
+}
+
+.info-sheet__item--button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.info-sheet__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.info-sheet__left i,
+.info-sheet__right i {
+  width: 16px;
+  text-align: center;
+}
+
+.info-sheet__left span {
+  font-size: 0.95rem;
+}
+
+.info-sheet__right {
+  color: rgba(38, 72, 43, 0.64);
+}
+
+.modal__sheet--zalo {
+  max-width: 360px;
+}
+
+.zalo-sheet {
+  display: grid;
+  gap: 14px;
+  padding: 8px 8px 4px;
+  text-align: center;
+  justify-items: center;
+}
+
+.zalo-sheet__badge {
+  width: fit-content;
+  margin: 0 auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(63, 111, 66, 0.1);
+  color: var(--forest);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.zalo-sheet__qr {
+  width: min(100%, 228px);
+  max-width: 228px;
+  height: auto;
+  margin: 0 auto;
+  display: block;
+  border-radius: 18px;
+  border: 1px solid rgba(63, 111, 66, 0.08);
+  object-fit: contain;
+  box-shadow: 0 14px 28px rgba(45, 82, 44, 0.14);
+}
+
+.zalo-sheet__title {
+  margin: 0;
+  color: var(--forest-dark);
+  font-family: "Hachi Maru Pop", "Be Vietnam Pro", cursive;
+  font-size: 1.12rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.zalo-sheet__desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.zalo-sheet__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.zalo-sheet__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.language-options {
+  display: grid;
+  gap: 10px;
+}
+
+.history-flow {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.waiter-flow {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.history-card,
+.history-empty {
+  padding: 14px;
+  border-radius: 16px;
+  background: #eef8ea;
+}
+
+.history-card {
+  display: grid;
+  gap: 12px;
+}
+
+.history-card__title {
+  margin: 0;
+  color: var(--forest-dark);
+  font-size: 0.98rem;
+}
+
+.history-card__meta {
+  display: grid;
+  gap: 8px;
+}
+
+.history-card__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.84rem;
+}
+
+.history-card__row span:last-child {
+  text-align: right;
+  color: var(--forest-dark);
+  font-weight: 600;
+}
+
+.history-empty {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.history-card__actions {
+  display: flex;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  gap: 10px;
+}
+
+.history-card__actions .booking-button {
+  min-height: 40px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(45, 82, 44, 0.14);
+}
+
+.history-card__actions .booking-button i {
+  font-size: 0.88em;
+}
+
+.history-upload {
+  width: 100%;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(63, 111, 66, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f9fdf7 0%, #edf7e9 100%);
+  color: var(--forest-dark);
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.history-upload__icon,
+.booking-upload__icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(63, 111, 66, 0.12);
+  color: var(--forest);
+}
+
+.history-upload__content,
+.booking-upload__content {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 4px;
+}
+
+.history-upload__content strong,
+.booking-upload__content strong {
+  color: var(--forest-dark);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.history-upload__content small,
+.booking-upload__content small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.history-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--forest);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.history-receipt-name {
+  color: #5d745f;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.booking-sheet {
+  display: grid;
+  gap: 16px;
+}
+
+.booking-sheet__header h3 {
+  margin: 0;
+  color: var(--forest-dark);
+  font-size: 1.08rem;
+}
+
+.booking-sheet__header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.booking-steps {
+  display: flex;
+  gap: 8px;
+}
+
+.booking-steps span {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(63, 111, 66, 0.12);
+}
+
+.booking-steps span.is-active {
+  background: var(--forest);
+}
+
+.booking-options,
+.booking-form,
+.booking-summary,
+.deposit-card,
+.booking-status-card,
+.admin-review {
+  display: grid;
+  gap: 12px;
+}
+
+.booking-option {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fbfff8;
+  color: var(--forest-dark);
+  text-align: left;
+}
+
+.booking-option.is-selected {
+  border-color: rgba(63, 111, 66, 0.34);
+  background: #e5f3df;
+  box-shadow: 0 10px 22px rgba(45, 82, 44, 0.09);
+}
+
+.booking-option strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.booking-option span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.booking-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.booking-field {
+  display: grid;
+  gap: 6px;
+}
+
+.booking-field--full {
+  grid-column: 1 / -1;
+}
+
+.booking-field label {
+  color: var(--forest-dark);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.booking-field input,
+.booking-field textarea,
+.booking-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(63, 111, 66, 0.14);
+  border-radius: 12px;
+  background: #fbfff8;
+  color: var(--forest-dark);
+  font: inherit;
+}
+
+.booking-field textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.booking-field.is-invalid input,
+.booking-field.is-invalid textarea,
+.booking-field.is-invalid select {
+  border-color: #c75b4a;
+  box-shadow: 0 0 0 2px rgba(199, 91, 74, 0.14);
+}
+
+.booking-field-error {
+  margin: 0;
+  color: #7d3528;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.booking-summary {
+  padding: 14px;
+  border-radius: 16px;
+  background: #eef8ea;
+}
+
+.booking-summary__row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.86rem;
+}
+
+.booking-summary__row span:last-child {
+  text-align: right;
+  color: var(--forest-dark);
+  font-weight: 600;
+}
+
+.booking-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.booking-button,
+.booking-button--ghost {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 700;
+  font: inherit;
+}
+
+.booking-button {
+  background: var(--forest);
+  color: var(--white);
+}
+
+.booking-button--ghost {
+  background: #e9f3e4;
+  color: var(--forest-dark);
+}
+
+.booking-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(63, 111, 66, 0.14);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f9fdf7 0%, #edf7e9 100%);
+  color: var(--forest-dark);
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(45, 82, 44, 0.08);
+}
+
+.booking-upload__cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(63, 111, 66, 0.12);
+  color: var(--forest);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.booking-upload.is-ready {
+  border-color: rgba(63, 111, 66, 0.22);
+  box-shadow: 0 12px 26px rgba(45, 82, 44, 0.12);
+}
+
+.deposit-card,
+.booking-status-card,
+.admin-review {
+  padding: 14px;
+  border-radius: 16px;
+  background: #eef8ea;
+}
+
+.deposit-card h4,
+.booking-status-card h4,
+.admin-review h4 {
+  margin: 0;
+  color: var(--forest-dark);
+  font-size: 0.95rem;
+}
+
+.deposit-card p,
+.booking-status-card p,
+.admin-review p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.deposit-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.deposit-meta__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.82rem;
+}
+
+.deposit-meta__item strong:last-child {
+  color: var(--forest-dark);
+  text-align: right;
+}
+
+.booking-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--forest);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.booking-hidden-input {
+  display: none;
+}
+
+.booking-status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(63, 111, 66, 0.12);
+  color: var(--forest);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.booking-code {
+  color: var(--forest-dark);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.admin-review {
+  border: 1px dashed rgba(63, 111, 66, 0.22);
+}
+
+.waiter-sheet {
+  gap: 14px;
+}
+
+.waiter-quick-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.waiter-quick-chip {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(63, 111, 66, 0.12);
+  border-radius: 999px;
+  background: #fbfff8;
+  color: var(--forest-dark);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.waiter-section-title {
+  color: var(--forest-dark);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.waiter-need-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.waiter-need-option {
+  min-height: 58px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(63, 111, 66, 0.14);
+  border-radius: 16px;
+  background: #fbfff8;
+  color: var(--forest-dark);
+  font: inherit;
+  text-align: left;
+}
+
+.waiter-need-option i {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(63, 111, 66, 0.1);
+  color: var(--forest);
+}
+
+.waiter-need-option span {
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.waiter-need-option.is-selected {
+  border-color: rgba(63, 111, 66, 0.34);
+  background: #e5f3df;
+  box-shadow: 0 10px 22px rgba(45, 82, 44, 0.09);
+}
+
+.waiter-grocery {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #eef8ea;
+}
+
+.waiter-grocery p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.waiter-grocery-grid {
+  max-height: 210px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.waiter-grocery-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--forest-dark);
+}
+
+.waiter-grocery-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--forest);
+}
+
+.waiter-grocery-option span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.waiter-grocery-option strong {
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.waiter-grocery-option small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.waiter-summary {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #eef8ea;
+}
+
+.waiter-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(149, 63, 48, 0.08);
+  color: #7d3528;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.waiter-sheet .booking-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.waiter-sheet .booking-button--ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfff8;
+  color: var(--forest-dark);
+}
+
+.language-option strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.language-option span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.language-option.is-selected {
+  border-color: rgba(63, 111, 66, 0.36);
+  background: #eef8ea;
+}
+
+.language-option__check {
+  color: var(--forest);
+  font-weight: 700;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --frame-width: 100%;
+  }
+
+  .stage {
+    padding: 0;
+  }
+
+  .phone-frame {
+    min-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .hero__cover {
+    min-height: 108px;
+  }
+
+  .hero h1 {
+    font-size: 1.03rem;
+  }
+
+  .hero__badge {
+    bottom: -18px;
+  }
+
+  .hero__badge img {
+    width: 58px;
+    height: 58px;
+  }
+
+  .content {
+    padding: 30px 10px 82px;
+  }
+
+  .product-screen__topbar {
+    padding: 12px 10px;
+  }
+
+  .product-screen__title {
+    font-size: 0.94rem;
+  }
+
+  .product-panel {
+    padding: 12px 10px 16px;
+  }
+
+  .product-panel__eyebrow {
+    font-size: 0.62rem;
+  }
+
+  .product-panel__name {
+    font-size: 1.06rem;
+  }
+
+  .product-panel__note,
+  .product-panel__description,
+  .product-panel__intro {
+    font-size: 0.86rem;
+    line-height: 1.55;
+  }
+
+  .product-panel__price {
+    font-size: 0.96rem;
+  }
+
+  .modal--sheet {
+    width: calc(100% - 20px);
+  }
+
+  .modal--booking {
+    width: calc(100% - 20px);
+  }
+
+  .booking-sheet__header h3 {
+    font-size: 1.08rem;
+  }
+
+  .booking-sheet__header p,
+  .booking-summary__row,
+  .deposit-card p,
+  .booking-status-card p,
+  .admin-review p,
+  .deposit-meta__item,
+  .history-card__row,
+  .history-empty {
+    font-size: 0.86rem;
+  }
+
+  .booking-option strong,
+  .deposit-card h4,
+  .booking-status-card h4,
+  .admin-review h4 {
+    font-size: 0.96rem;
+  }
+
+  .booking-option span,
+  .booking-field label,
+  .booking-receipt,
+  .booking-code,
+  .booking-status-chip,
+  .history-card__title,
+  .history-link,
+  .history-receipt-name,
+  .booking-upload__cta {
+    font-size: 0.82rem;
+  }
+
+  .history-card__actions .booking-button {
+    min-height: 36px;
+    padding: 0 16px;
+  }
+
+  .history-upload {
+    padding: 10px 12px;
+  }
+
+  .booking-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .info-sheet__title {
+    font-size: 1rem;
+  }
+
+  .info-sheet__item {
+    padding: 14px 16px;
+  }
+
+  .info-sheet__left span {
+    font-size: 0.96rem;
+  }
+
+  .zalo-sheet__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .similar-card__body {
+    padding-top: 10px;
+  }
+
+  .similar-card__eyebrow {
+    font-size: 0.62rem;
+  }
+
+  .similar-card__name {
+    font-size: 0.98rem;
+  }
+
+  .similar-card__note,
+  .similar-card__description {
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+
+  .similar-card__price {
+    font-size: 0.94rem;
+  }
+
+  .brand-story {
+    margin-bottom: 18px;
+  }
+
+  .brand-story p {
+    font-size: 13px;
+  }
+
+  .info-card {
+    grid-template-columns: 20px 1fr 20px;
+    padding: 12px 10px;
+    border-radius: 10px;
+  }
+
+  .info-card__icon,
+  .info-card__action {
+    width: 18px;
+    height: 18px;
+  }
+
+  .info-card strong {
+    font-size: 1rem;
+  }
+
+  .info-card p,
+  .menu-group p,
+  .menu-card__meta,
+  .menu-card__desc,
+  .menu-card__button {
+    font-size: 0.74rem;
+    line-height: 1.5;
+  }
+
+  .info-card p {
+    font-size: 0.82rem;
+  }
+
+  .category-section,
+  .menu-section {
+    margin-top: 14px;
+  }
+
+  .category-section h2,
+  .menu-group h3 {
+    font-size: 0.98rem;
+  }
+
+  .category-chip {
+    min-height: 32px;
+    padding: 0 12px;
+    font-size: 0.78rem;
+  }
+
+  .menu-grid {
+    gap: 8px;
+  }
+
+  .menu-card__image {
+    border-radius: 4px;
+  }
+
+  .menu-card__title {
+    font-size: 0.82rem;
+    line-height: 1.25;
+  }
+
+  .menu-card__price {
+    font-size: 0.94rem;
+  }
+
+  .bottom-nav {
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    gap: 8px;
+  }
+
+  .nav-fab {
+    width: 38px;
+    height: 38px;
+  }
+
+  .nav-fab svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .bottom-nav__bar {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .nav-divider {
+    height: 24px;
+  }
+
+  .nav-chip,
+  .nav-icon {
+    height: 28px;
+  }
+
+  .nav-icon {
+    width: 28px;
+  }
+
+  .nav-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-icon .fa-solid,
+  .nav-icon .fa-regular,
+  .nav-icon .fa-brands {
+    font-size: 16px;
+  }
+
+  .nav-chip {
+    gap: 6px;
+    padding: 0 8px;
+    font-size: 0.7rem;
+  }
+
+  .nav-chip__fa-icon {
+    width: 16px;
+    font-size: 16px;
+  }
+}

@@ -7,7 +7,6 @@ const fallbackZones = [
   { id: 4, slug: "vip-room", name: "Phòng VIP" },
 ];
 
-
 const fallbackStaffMembers = [
   {
     code: "ST-001",
@@ -140,6 +139,94 @@ const fallbackStaffAssignments = [
   },
 ] as const;
 
+function compareBookingDateDesc(
+  left: { bookingDate: string; bookingTime: string },
+  right: { bookingDate: string; bookingTime: string },
+) {
+  return `${right.bookingDate}T${right.bookingTime}`.localeCompare(`${left.bookingDate}T${left.bookingTime}`);
+}
+
+function buildFallbackBookingList() {
+  return bookingRows
+    .map((booking, index) => ({
+      id: index + 1,
+      code: booking.id,
+      customerName: booking.guest,
+      customerPhone: booking.phone,
+      bookingDate: booking.date,
+      bookingTime: booking.time,
+      guestCount: booking.guests,
+      zoneId: null,
+      tableId: null,
+      status: booking.status === "pending" ? "pending" : booking.status === "seated" ? "seated" : "confirmed",
+      note: booking.note,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      zoneName: booking.zone,
+      tableCode: booking.table,
+    }))
+    .sort(compareBookingDateDesc);
+}
+
+function buildFallbackWaiterList() {
+  return waiterRequests.map((request, index) => ({
+    id: index + 1,
+    code: request.id,
+    tableId: null,
+    zoneId: null,
+    need: request.need,
+    note: request.note,
+    status: request.status,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    zoneName: request.zone,
+    tableCode: request.table,
+  }));
+}
+
+function buildFallbackTableList() {
+  return tableStatus.map((table, index) => ({
+    id: index + 1,
+    code: table.id,
+    zoneId: null,
+    seats: table.seats,
+    status: table.status,
+    createdAt: new Date(),
+    zoneName: table.zone,
+  }));
+}
+
+function buildFallbackServices() {
+  return serviceItems.map((item, index) => ({
+    id: index + 1,
+    name: item.name,
+    slug: item.id.toLowerCase(),
+    category: item.category,
+    description: null,
+    priceLabel: item.price,
+    imagePath: item.image,
+    visible: item.visible,
+    bookingEnabled: item.visible,
+    zoneSlug: item.category === "Cafe" ? "cafe-garden" : item.category === "BBQ" ? "bbq-deck-a" : null,
+    nameI18n: null,
+    descriptionI18n: null,
+    priceLabelI18n: null,
+    sortOrder: index + 1,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+}
+
+function buildFallbackTimeline(bookingList: ReturnType<typeof buildFallbackBookingList>) {
+  const sortedTimeline = bookingList.slice(0, 3).map((booking) => ({
+    time: booking.bookingTime,
+    title: `${booking.customerName} - ${booking.zoneName ?? "Chưa gán khu"} / ${booking.tableCode ?? "Chưa gán bàn"}`,
+    detail: `${booking.guestCount} khách · ${booking.status}`,
+  }));
+
+  return sortedTimeline.length > 0 ? sortedTimeline : upcomingTimeline;
+}
+
 function getFallbackStaffMembers() {
   return fallbackStaffMembers.map((staff, index) => ({
     id: index + 1,
@@ -242,73 +329,28 @@ export function getFallbackCalendarSnapshot() {
 
 export function getFallbackDashboardSnapshot() {
   const staffSnapshot = getFallbackStaffSnapshot();
+  const bookingList = buildFallbackBookingList();
+  const waiterList = buildFallbackWaiterList();
+  const tableList = buildFallbackTableList();
 
   return {
-    bookingList: bookingRows.map((booking, index) => ({
-      id: index + 1,
-      code: booking.id,
-      customerName: booking.guest,
-      customerPhone: booking.phone,
-      bookingDate: booking.date,
-      bookingTime: booking.time,
-      guestCount: booking.guests,
-      zoneId: null,
-      tableId: null,
-      status: booking.status === "pending" ? "pending" : booking.status === "seated" ? "seated" : "confirmed",
-      note: booking.note,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      zoneName: booking.zone,
-      tableCode: booking.table,
-    })),
-    waiterList: waiterRequests.map((request, index) => ({
-      id: index + 1,
-      code: request.id,
-      tableId: null,
-      zoneId: null,
-      need: request.need,
-      note: request.note,
-      status: request.status,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      zoneName: request.zone,
-      tableCode: request.table,
-    })),
-    tableList: tableStatus.map((table, index) => ({
-      id: index + 1,
-      code: table.id,
-      zoneId: null,
-      seats: table.seats,
-      status: table.status,
-      createdAt: new Date(),
-      zoneName: table.zone,
-    })),
+    bookingList,
+    waiterList,
+    tableList,
     stats: {
-      bookingsToday: Number(summaryCards[0]?.value ?? 0),
-      waiterOpen: 4,
-      occupiedTables: 14,
+      bookingsToday: Number(summaryCards[0]?.value ?? bookingList.length),
+      waiterOpen: waiterList.filter((request) => request.status !== "done").length,
+      occupiedTables: tableStatus.filter((table) => table.status === "occupied").length,
       activeStaff: staffSnapshot.staffList.filter((staff) => staff.status === "active").length,
       assignedStaffToday: staffSnapshot.assignmentList.length,
       staffingAlerts: 0,
     },
-    services: serviceItems.map((item, index) => ({
-      id: index + 1,
-      name: item.name,
-      slug: item.id.toLowerCase(),
-      category: item.category,
-      description: null,
-      priceLabel: item.price,
-      imagePath: item.image,
-      visible: item.visible,
-      sortOrder: index + 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })),
+    services: buildFallbackServices(),
     staffList: staffSnapshot.staffList,
     shiftList: staffSnapshot.shiftList,
     assignmentList: staffSnapshot.assignmentList,
     staffingRecommendations: staffSnapshot.staffingRecommendations,
     assignmentConflicts: staffSnapshot.assignmentConflicts,
-    timeline: upcomingTimeline,
+    timeline: buildFallbackTimeline(bookingList),
   };
 }

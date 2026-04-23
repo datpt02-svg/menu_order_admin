@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
@@ -116,11 +116,16 @@ export async function getBookings(): Promise<BookingRow[]> {
       zoneId: bookings.zoneId,
       tableId: bookings.tableId,
       status: bookings.status,
+      depositSlipPath: bookings.depositSlipPath,
+      depositReviewStatus: bookings.depositReviewStatus,
+      depositReviewedAt: bookings.depositReviewedAt,
+      depositReviewNote: bookings.depositReviewNote,
       note: bookings.note,
       createdAt: bookings.createdAt,
       updatedAt: bookings.updatedAt,
       zoneName: zones.name,
       tableCode: tables.code,
+      depositSlipUrl: bookings.depositSlipPath,
     })
     .from(bookings)
     .leftJoin(zones, eq(bookings.zoneId, zones.id))
@@ -172,7 +177,15 @@ export async function getTables(): Promise<TableRow[]> {
 }
 
 export async function getServices(): Promise<ServiceRow[]> {
-  return db.select().from(services).orderBy(services.sortOrder, services.name);
+  return db.select().from(services).orderBy(asc(services.sortOrder), asc(services.name), asc(services.id));
+}
+
+export async function getBookingServices(): Promise<ServiceRow[]> {
+  return db
+    .select()
+    .from(services)
+    .where(and(eq(services.visible, true), eq(services.bookingEnabled, true)))
+    .orderBy(asc(services.sortOrder), asc(services.name), asc(services.id));
 }
 
 export async function getStaffMembers(): Promise<StaffMemberRow[]> {

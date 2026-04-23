@@ -2,10 +2,9 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import * as schema from "@/db/schema";
+import { getDbConnectionString } from "@/lib/env";
 
-const connectionString =
-  process.env.DATABASE_URL ??
-  "postgres://postgres:postgres@localhost:5432/samcamping_admin";
+const connectionString = getDbConnectionString();
 
 declare global {
   // eslint-disable-next-line no-var

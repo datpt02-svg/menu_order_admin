@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import { ArrowUpRight, Download, Sparkles } from "lucide-react";
 
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -20,6 +21,7 @@ function getWaiterTone(status: string) {
 }
 
 export default async function DashboardPage() {
+  noStore();
   const snapshot = await safeDashboardSnapshot();
   const summaryCards = [
     {

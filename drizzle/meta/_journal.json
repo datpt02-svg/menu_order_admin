@@ -15,6 +15,20 @@
       "when": 1776832232479,
       "tag": "0001_pink_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776900000000,
+      "tag": "0002_booking_services_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776950400000,
+      "tag": "0003_booking_deposit_review",
+      "breakpoints": true
     }
   ]
 }
