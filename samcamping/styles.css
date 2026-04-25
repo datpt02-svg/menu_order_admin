@@ -590,6 +590,10 @@ button {
   margin: auto auto 0;
 }
 
+.modal--sheet-centered {
+  margin: auto;
+}
+
 .modal--booking {
   width: min(440px, calc(100% - 20px));
 }
@@ -611,6 +615,14 @@ button {
 .modal__sheet--info {
   padding: 12px 0 0;
   border-radius: 28px 28px 0 0;
+}
+
+.modal--sheet-centered .modal__sheet--info {
+  border-radius: 28px;
+}
+
+.modal--sheet-centered .info-sheet__handle {
+  display: none;
 }
 
 .modal__sheet--booking {
