@@ -3979,6 +3979,7 @@ function renderBookingFlow() {
         <div class="booking-status-card">
           <span class="booking-status-chip">${copy.statusAwaitingDeposit}</span>
         </div>
+        ${state.bookingError ? `<p class="waiter-error">${escapeHtml(state.bookingError)}</p>` : ""}
         <div class="deposit-card">
           <h4>${copy.transferInfoTitle}</h4>
           ${renderDepositQr(bookingConfig, state.bookingDraft.code || "")}
@@ -4002,7 +4003,7 @@ function renderBookingFlow() {
         </div>
         <div class="booking-actions">
           <button type="button" class="booking-button--ghost" data-booking-back="review">${copy.buttonBack}</button>
-          <button type="button" class="booking-button" ${state.bookingDraft.receiptPath ? "" : "disabled"} data-booking-submit="request">${locale.confirmReceiptSent}</button>
+          <button type="button" class="booking-button" data-booking-submit="request">${locale.confirmReceiptSent}</button>
         </div>
       </div>
     `;

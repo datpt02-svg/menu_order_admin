@@ -605,12 +605,14 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
 
                 <div className="space-y-4">
                   <div className="rounded-[24px] border border-[color:var(--line)] bg-white/75 p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <div className="text-sm font-bold uppercase tracking-[0.12em] text-[var(--mint-deep)]">{selectedBooking.code}</div>
-                        <div className="mt-2 text-xl font-semibold text-[var(--forest-dark)]">{selectedBooking.customerName}</div>
+                        <div className="mt-2 break-words text-xl font-semibold text-[var(--forest-dark)]">{selectedBooking.customerName}</div>
                       </div>
-                      <Badge tone={getDepositTone(selectedBooking.depositReviewStatus)}>{getDepositLabel(selectedBooking.depositReviewStatus)}</Badge>
+                      <Badge tone={getDepositTone(selectedBooking.depositReviewStatus)} className="shrink-0 whitespace-nowrap">
+                        {getDepositLabel(selectedBooking.depositReviewStatus)}
+                      </Badge>
                     </div>
                     <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
                       <div>SĐT: {selectedBooking.customerPhone}</div>
