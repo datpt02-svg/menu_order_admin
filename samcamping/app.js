@@ -195,6 +195,7 @@ const uiCopy = {
     buttonSendBooking: "Gửi booking",
     buttonDone: "Hoàn tất",
     statusRequestSent: "Yêu cầu đã gửi",
+    statusAwaitingDeposit: "Chờ gửi bill cọc",
     statusDepositVerifying: "Đang xác minh cọc",
     statusHeld: "Đã giữ lịch",
     billSentLabel: "Bill đã gửi",
@@ -242,6 +243,7 @@ const uiCopy = {
     buttonSendBooking: "Send booking",
     buttonDone: "Done",
     statusRequestSent: "Request sent",
+    statusAwaitingDeposit: "Awaiting deposit slip",
     statusDepositVerifying: "Deposit under review",
     statusHeld: "Booking held",
     billSentLabel: "Receipt sent",
@@ -289,6 +291,7 @@ const uiCopy = {
     buttonSendBooking: "提交 booking",
     buttonDone: "完成",
     statusRequestSent: "请求已发送",
+    statusAwaitingDeposit: "等待上传订金凭证",
     statusDepositVerifying: "定金核对中",
     statusHeld: "已保留档期",
     billSentLabel: "凭证已发送",
@@ -336,6 +339,7 @@ const uiCopy = {
     buttonSendBooking: "Booking 보내기",
     buttonDone: "완료",
     statusRequestSent: "요청 전송됨",
+    statusAwaitingDeposit: "입금 영수증 대기 중",
     statusDepositVerifying: "보증금 확인 중",
     statusHeld: "일정 확보 완료",
     billSentLabel: "영수증 전송됨",
@@ -383,6 +387,7 @@ const uiCopy = {
     buttonSendBooking: "Booking を送信",
     buttonDone: "完了",
     statusRequestSent: "リクエスト送信済み",
+    statusAwaitingDeposit: "入金明細待ち",
     statusDepositVerifying: "予約金を確認中",
     statusHeld: "日程を確保済み",
     billSentLabel: "明細送信済み",
@@ -2144,6 +2149,13 @@ const zaloModalDesc = document.querySelector("#zalo-modal-desc");
 const zaloOpenLink = document.querySelector("#zalo-open-link");
 const zaloDownloadLink = document.querySelector("#zalo-download-link");
 
+const DEFAULT_BOOKING_CONFIG = {
+  depositAmount: 100000,
+  bankName: "MB Bank",
+  bankCode: "mbbank",
+  accountNumber: "09680881",
+};
+
 const state = {
   activeSection: sections[0].id,
   locale: "vi",
@@ -2152,6 +2164,7 @@ const state = {
   bookingError: "",
   bookingFieldErrors: {},
   bookingServices: [],
+  bookingConfig: { ...DEFAULT_BOOKING_CONFIG },
   bookingDraft: {
     serviceId: "",
     customerName: "",
@@ -2179,7 +2192,25 @@ const state = {
 };
 
 const BOOKING_STORAGE_KEY = "samcamping_latest_booking";
+const BOOKING_REALTIME_EVENTS = ["booking:updated", "booking:deleted"];
+
+let bookingRealtimeSocket = null;
+let bookingRealtimeListeners = [];
+let bookingDraftVersion = 0;
 const WAITER_STORAGE_KEY = "samcamping_latest_waiter_request";
+
+function logBookingTrace(label, extra = {}) {
+  const latestBooking = getLatestBooking();
+  console.log(`[booking-trace] ${label}`, {
+    draftVersion: bookingDraftVersion,
+    step: state.bookingStep,
+    draftCode: state.bookingDraft.code || "",
+    latestCode: latestBooking?.code || "",
+    receiptName: state.bookingDraft.receiptName || latestBooking?.receiptName || "",
+    receiptPath: state.bookingDraft.receiptPath || latestBooking?.receiptPath || "",
+    ...extra,
+  });
+}
 
 function t(value) {
   if (typeof value === "string") return value;
@@ -2218,6 +2249,84 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function looksLikeServerLog(value) {
+  const text = String(value || "");
+  return text.includes("[booking-api]") || text.includes("OPTIONS /api/bookings") || text.includes("POST /api/bookings") || text.includes("GET /api/bookings");
+}
+
+function sanitizeBookingText(value, maxLength = 1000) {
+  const text = String(value || "").trim();
+  if (!text || looksLikeServerLog(text)) return "";
+  return text.slice(0, maxLength);
+}
+
+function sanitizeLatestBookingRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  return {
+    ...record,
+    customerName: sanitizeBookingText(record.customerName, 160),
+    customerPhone: sanitizeBookingText(record.customerPhone, 40),
+    bookingDate: sanitizeBookingText(record.bookingDate, 20),
+    bookingTime: sanitizeBookingText(record.bookingTime, 20),
+    note: sanitizeBookingText(record.note, 1000),
+    receiptName: sanitizeBookingText(record.receiptName, 255),
+    depositReviewNote: sanitizeBookingText(record.depositReviewNote, 1000),
+  };
+}
+
+function getSafeBookingDraftValue(primary, fallback, maxLength) {
+  const primaryValue = sanitizeBookingText(primary, maxLength);
+  if (primaryValue) return primaryValue;
+  return sanitizeBookingText(fallback, maxLength);
+}
+
+function getSafeBookingNoteValue(primary, fallback) {
+  const primaryValue = sanitizeBookingText(primary, 1000);
+  if (primaryValue) return primaryValue;
+  const fallbackValue = sanitizeBookingText(fallback, 1000);
+  return fallbackValue || null;
+}
+
+function getSafeBookingPhoneValue(primary, fallback) {
+  const primaryValue = sanitizeBookingText(primary, 40);
+  if (primaryValue) return primaryValue;
+  return sanitizeBookingText(fallback, 40);
+}
+
+function getSafeBookingDateValue(primary, fallback) {
+  const primaryValue = sanitizeBookingText(primary, 20);
+  if (primaryValue) return primaryValue;
+  return sanitizeBookingText(fallback, 20);
+}
+
+function getSafeBookingTimeValue(primary, fallback) {
+  const primaryValue = sanitizeBookingText(primary, 20);
+  if (primaryValue) return primaryValue;
+  return sanitizeBookingText(fallback, 20);
+}
+
+function getSafeBookingReceiptNameValue(primary, fallback) {
+  const primaryValue = sanitizeBookingText(primary, 255);
+  if (primaryValue) return primaryValue;
+  return sanitizeBookingText(fallback, 255);
+}
+
+function getSafeBookingReviewNoteValue(primary, fallback) {
+  const primaryValue = sanitizeBookingText(primary, 1000);
+  if (primaryValue) return primaryValue;
+  return sanitizeBookingText(fallback, 1000);
+}
+
+function sanitizeCurrentBookingDraft() {
+  state.bookingDraft.customerName = sanitizeBookingText(state.bookingDraft.customerName, 160);
+  state.bookingDraft.customerPhone = sanitizeBookingText(state.bookingDraft.customerPhone, 40);
+  state.bookingDraft.bookingDate = sanitizeBookingText(state.bookingDraft.bookingDate, 20);
+  state.bookingDraft.bookingTime = sanitizeBookingText(state.bookingDraft.bookingTime, 20);
+  state.bookingDraft.note = sanitizeBookingText(state.bookingDraft.note, 1000);
+  state.bookingDraft.receiptName = sanitizeBookingText(state.bookingDraft.receiptName, 255);
+  state.bookingDraft.depositReviewNote = sanitizeBookingText(state.bookingDraft.depositReviewNote, 1000);
+}
+
 function truncateText(value, maxLength = 88) {
   const text = t(value).replace(/\s+/g, " ").trim();
   if (text.length <= maxLength) return text;
@@ -2225,6 +2334,7 @@ function truncateText(value, maxLength = 88) {
 }
 
 function resetBookingDraft() {
+  bookingDraftVersion += 1;
   state.bookingStep = "service";
   state.bookingError = "";
   state.bookingFieldErrors = {};
@@ -2247,6 +2357,44 @@ function resetBookingDraft() {
 function generateBookingCode() {
   return `SAM-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
+
+function formatDepositAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 1) return "--";
+  return `${new Intl.NumberFormat("vi-VN").format(amount)}đ`;
+}
+
+function getBookingConfig() {
+  return state.bookingConfig || DEFAULT_BOOKING_CONFIG;
+}
+
+function buildVietQrUrl(config, bookingCode) {
+  const bankCode = String(config?.bankCode || "").trim();
+  const accountNumber = String(config?.accountNumber || "").trim();
+  const amount = Number(config?.depositAmount || 0);
+  const addInfo = String(bookingCode || "").trim();
+  if (!bankCode || !accountNumber || !addInfo || !Number.isFinite(amount) || amount < 1) return "";
+  const params = new URLSearchParams({
+    amount: String(amount),
+    addInfo,
+  });
+  return `https://img.vietqr.io/image/${bankCode}-${accountNumber}-compact2.png?${params.toString()}`;
+}
+
+function renderDepositQr(config, bookingCode) {
+  const qrUrl = buildVietQrUrl(config, bookingCode);
+  if (!qrUrl) {
+    return '<div class="deposit-qr deposit-qr--empty">QR chưa sẵn sàng. Anh/chị dùng thông tin chuyển khoản bên dưới giúp em nhé.</div>';
+  }
+  return `
+    <div class="deposit-qr">
+      <div class="deposit-qr__label">VietQR</div>
+      <img src="${escapeHtml(qrUrl)}" alt="VietQR" class="deposit-qr__image" loading="lazy" />
+      <p class="deposit-qr__hint">Quét mã để app ngân hàng tự điền số tiền và nội dung chuyển khoản.</p>
+    </div>
+  `;
+}
+
 
 function inferZoneSlugFromService(serviceId) {
   if (!serviceId) return null;
@@ -2353,6 +2501,10 @@ function moveToBookingStep(nextStep) {
     return;
   }
 
+  if (nextStep === "deposit" && !state.bookingDraft.code) {
+    state.bookingDraft.code = generateBookingCode();
+  }
+
   state.bookingError = "";
   state.bookingStep = nextStep || state.bookingStep;
   renderBookingFlow();
@@ -2377,10 +2529,149 @@ function getBookingSubmitErrorMessage() {
     : "We couldn't send your booking right now. Please check your connection and try again.";
 }
 
+function getActiveBookingConflictMessage() {
+  return state.locale === "vi"
+    ? "Anh/chị đang có booking cũ chưa xử lý xong bill cọc. Vui lòng tiếp tục booking đó trước."
+    : "You already have an active booking awaiting deposit handling. Please continue that booking first.";
+}
+
+function isActiveBookingConflictError(error) {
+  return error?.code === "ACTIVE_BOOKING_CONFLICT";
+}
+
+function syncLatestBookingRecord(booking) {
+  if (!booking?.code) return null;
+  const latestBooking = getLatestBooking() || {};
+  const serviceId = latestBooking.serviceId || state.bookingDraft.serviceId || "";
+  const receiptName = latestBooking.receiptName || state.bookingDraft.receiptName || "";
+  const nextBooking = {
+    ...latestBooking,
+    ...booking,
+    serviceId,
+    receiptName,
+    receiptPath: booking.depositSlipPath || latestBooking.receiptPath || state.bookingDraft.receiptPath || "",
+    depositReviewNote: booking.depositReviewNote || "",
+    status: mapBookingStatusFromServer(booking),
+    statusLabel: getBookingStatusLabel(mapBookingStatusFromServer(booking)),
+    updatedAt: booking.updatedAt || new Date().toISOString(),
+  };
+  localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(nextBooking));
+  return nextBooking;
+}
+
+function isBookingBlocking(booking) {
+  return booking?.status === "deposit_pending" || booking?.status === "deposit_verifying" || isBookingRejected(booking);
+}
+
+function shouldResumeLatestBooking(booking) {
+  return Boolean(booking?.code) && isBookingBlocking(booking);
+}
+
+function clearNonBlockingLatestBooking() {
+  const latestBooking = getLatestBooking();
+  if (!latestBooking?.code) return;
+  if (shouldResumeLatestBooking(latestBooking)) return;
+  localStorage.removeItem(BOOKING_STORAGE_KEY);
+}
+
+function openBookingFlowForLatestBooking(booking) {
+  if (!booking) return false;
+  syncBookingDraftFromHistory(booking);
+  if (booking.status === "deposit_rejected") {
+    state.bookingStep = "deposit";
+    return true;
+  }
+  if (booking.status === "deposit_pending") {
+    state.bookingStep = "deposit";
+    return true;
+  }
+  if (booking.status === "deposit_verifying") {
+    state.bookingStep = "pending";
+    return true;
+  }
+  if (booking.status === "confirmed") {
+    state.bookingStep = "confirmed";
+    return true;
+  }
+  return false;
+}
+
 function buildApiUrl(path) {
   const baseUrl = String(window.SAM_API_BASE_URL || "").trim();
   if (!baseUrl) return path;
   return `${baseUrl.replace(/\/$/, "")}${path}`;
+}
+
+function getRealtimeBaseUrl() {
+  const baseUrl = String(window.SAM_API_BASE_URL || "").trim();
+  if (!baseUrl || baseUrl === "/") return undefined;
+  return baseUrl.replace(/\/$/, "");
+}
+
+function getBookingRealtimeSocket() {
+  if (bookingRealtimeSocket || typeof window.io !== "function") return bookingRealtimeSocket;
+  bookingRealtimeSocket = window.io(getRealtimeBaseUrl(), { path: "/socket.io" });
+  return bookingRealtimeSocket;
+}
+
+function handleBookingRealtimeUpdate(payload) {
+  const latestBooking = getLatestBooking();
+  if (!latestBooking?.code) return;
+
+  const payloadCode = payload?.code || "";
+  const previousCode = payload?.previousCode || "";
+  const matchesLatestBooking = payloadCode === latestBooking.code
+    || previousCode === latestBooking.code
+    || (latestBooking.id && payload?.id && latestBooking.id === payload.id);
+  if (!matchesLatestBooking) return;
+
+  if (payloadCode && payloadCode !== latestBooking.code) {
+    const currentCode = latestBooking.code;
+    latestBooking.code = payloadCode;
+    latestBooking.updatedAt = payload?.updatedAt || new Date().toISOString();
+    localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(latestBooking));
+    if (state.bookingDraft.code === previousCode || state.bookingDraft.code === currentCode) {
+      state.bookingDraft.code = payloadCode;
+    }
+  }
+
+  logBookingTrace("realtime-event", {
+    payloadCode,
+    previousCode,
+    payloadStatus: payload?.status || "",
+  });
+
+  if (payload?.status === "deleted") {
+    syncUiAfterBookingRemoval();
+    logBookingTrace("realtime-deleted-after-recovery", {
+      payloadCode,
+    });
+    return;
+  }
+
+  refreshLatestBookingStatusAndRender();
+}
+
+function attachBookingRealtime() {
+  if (bookingRealtimeListeners.length) return;
+  const socket = getBookingRealtimeSocket();
+  if (!socket) return;
+  bookingRealtimeListeners = BOOKING_REALTIME_EVENTS.map((eventName) => {
+    const listener = (payload) => {
+      handleBookingRealtimeUpdate(payload);
+    };
+    socket.on(eventName, listener);
+    return { eventName, listener };
+  });
+}
+
+function detachBookingRealtime() {
+  const socket = getBookingRealtimeSocket();
+  if (!socket || !bookingRealtimeListeners.length) return;
+  for (const { eventName, listener } of bookingRealtimeListeners) {
+    socket.off(eventName, listener);
+  }
+  bookingRealtimeListeners = [];
 }
 
 async function loadBookingServices() {
@@ -2388,6 +2679,19 @@ async function loadBookingServices() {
   if (!response.ok) throw new Error("booking-services-fetch-failed");
   const result = await response.json();
   state.bookingServices = Array.isArray(result.services) ? result.services : [];
+}
+
+async function loadBookingConfig() {
+  const response = await fetch(buildApiUrl("/api/booking-config"));
+  if (!response.ok) throw new Error("booking-config-fetch-failed");
+  const result = await response.json();
+  const config = result?.bookingConfig;
+  state.bookingConfig = {
+    depositAmount: Number(config?.depositAmount) > 0 ? Number(config.depositAmount) : DEFAULT_BOOKING_CONFIG.depositAmount,
+    bankName: String(config?.bankName || DEFAULT_BOOKING_CONFIG.bankName),
+    bankCode: String(config?.bankCode || DEFAULT_BOOKING_CONFIG.bankCode),
+    accountNumber: String(config?.accountNumber || DEFAULT_BOOKING_CONFIG.accountNumber),
+  };
 }
 
 async function uploadBookingReceipt(file) {
@@ -2402,76 +2706,525 @@ async function uploadBookingReceipt(file) {
 }
 
 async function submitBookingDraft() {
+  const requestVersion = bookingDraftVersion;
+  const bookingCode = state.bookingDraft.code || generateBookingCode();
+  state.bookingDraft.code = bookingCode;
+
+  logBookingTrace("submit-create-before-fetch", {
+    requestVersion,
+    payloadCode: bookingCode,
+  });
+
   const response = await fetch(buildApiUrl("/api/bookings"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      code: state.bookingDraft.code || generateBookingCode(),
-      customerName: state.bookingDraft.customerName,
-      customerPhone: state.bookingDraft.customerPhone,
-      bookingDate: state.bookingDraft.bookingDate,
-      bookingTime: state.bookingDraft.bookingTime,
+      code: bookingCode,
+      customerName: getSafeBookingDraftValue(state.bookingDraft.customerName, "", 160),
+      customerPhone: getSafeBookingPhoneValue(state.bookingDraft.customerPhone, ""),
+      bookingDate: getSafeBookingDateValue(state.bookingDraft.bookingDate, ""),
+      bookingTime: getSafeBookingTimeValue(state.bookingDraft.bookingTime, ""),
       guestCount: Number(state.bookingDraft.guestCount || 1),
       zoneSlug: inferZoneSlugFromService(state.bookingDraft.serviceId),
       status: "pending",
       depositSlipPath: state.bookingDraft.receiptPath || null,
       depositReviewStatus: state.bookingDraft.receiptPath ? "submitted" : "not_submitted",
       depositReviewNote: null,
-      note: state.bookingDraft.note || null,
+      note: getSafeBookingNoteValue(state.bookingDraft.note, null),
     }),
   });
 
-  if (!response.ok) throw new Error("booking-submit-failed");
-  const result = await response.json();
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(response.status === 409 ? "active-booking-conflict" : "booking-submit-failed");
+    error.code = result.code || "";
+    error.booking = result.booking || null;
+    throw error;
+  }
+
+  if (requestVersion !== bookingDraftVersion) {
+    return;
+  }
+
   const booking = result.booking || {};
+  syncLatestBookingRecord(booking);
   state.bookingDraft.code = booking.code || state.bookingDraft.code;
-  state.bookingDraft.status = state.bookingDraft.receiptPath ? "deposit_verifying" : booking.status || "submitted";
+  state.bookingDraft.status = mapBookingStatusFromServer(booking);
   state.bookingDraft.depositReviewNote = booking.depositReviewNote || "";
   persistLatestBooking();
 }
 
 async function resubmitBookingReceipt() {
+  const requestVersion = bookingDraftVersion;
   const latestBooking = getLatestBooking();
-  if (!latestBooking?.code) throw new Error("booking-not-found");
+  const currentCode = state.bookingDraft.code || latestBooking?.code || "";
+  if (!currentCode) throw new Error("booking-not-found");
+
+  logBookingTrace("submit-resubmit-start", {
+    requestVersion,
+    payloadCode: currentCode,
+  });
+
+  const payload = {
+    code: currentCode,
+    customerName: getSafeBookingDraftValue(state.bookingDraft.customerName, latestBooking?.customerName, 160),
+    customerPhone: getSafeBookingPhoneValue(state.bookingDraft.customerPhone, latestBooking?.customerPhone),
+    bookingDate: getSafeBookingDateValue(state.bookingDraft.bookingDate, latestBooking?.bookingDate),
+    bookingTime: getSafeBookingTimeValue(state.bookingDraft.bookingTime, latestBooking?.bookingTime),
+    guestCount: Number(state.bookingDraft.guestCount || latestBooking?.guestCount || 1),
+    zoneSlug: inferZoneSlugFromService(state.bookingDraft.serviceId || latestBooking?.serviceId || ""),
+    status: "pending",
+    depositSlipPath: state.bookingDraft.receiptPath || latestBooking?.receiptPath || null,
+    depositReviewStatus: "submitted",
+    depositReviewNote: null,
+    note: getSafeBookingNoteValue(state.bookingDraft.note, latestBooking?.note),
+  };
+
   const response = await fetch(buildApiUrl("/api/bookings"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      code: latestBooking.code,
-      customerName: latestBooking.customerName,
-      customerPhone: latestBooking.customerPhone,
-      bookingDate: latestBooking.bookingDate,
-      bookingTime: latestBooking.bookingTime,
-      guestCount: Number(latestBooking.guestCount || 1),
-      zoneSlug: inferZoneSlugFromService(latestBooking.serviceId),
-      status: "pending",
-      depositSlipPath: latestBooking.receiptPath || null,
-      depositReviewStatus: "submitted",
-      depositReviewNote: null,
-      note: latestBooking.note || null,
-    }),
+    body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error("booking-resubmit-failed");
   const result = await response.json();
+  if (requestVersion !== bookingDraftVersion) {
+    return;
+  }
+
   const booking = result.booking || {};
-  latestBooking.receiptPath = booking.depositSlipPath || latestBooking.receiptPath || "";
-  latestBooking.depositReviewNote = booking.depositReviewNote || "";
-  latestBooking.status = "deposit_verifying";
-  latestBooking.statusLabel = getBookingStatusLabel("deposit_verifying");
-  latestBooking.updatedAt = new Date().toISOString();
-  localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(latestBooking));
+
+  state.bookingDraft.code = booking.code || currentCode;
+  state.bookingDraft.receiptPath = booking.depositSlipPath || payload.depositSlipPath || "";
+  state.bookingDraft.depositReviewNote = booking.depositReviewNote || "";
+  state.bookingDraft.status = "deposit_verifying";
+  state.bookingDraft.statusLabel = getBookingStatusLabel("deposit_verifying");
+  state.bookingDraft.updatedAt = new Date().toISOString();
+  persistLatestBooking();
 }
 
 async function fetchBookingStatus(code) {
   if (!code) return null;
-  return null;
+  const response = await fetch(buildApiUrl(`/api/bookings?code=${encodeURIComponent(code)}`));
+  if (response.status === 404) return { missing: true };
+  if (!response.ok) throw new Error("booking-status-fetch-failed");
+  const result = await response.json();
+  return result.booking || null;
 }
+
+async function cancelLatestBooking() {
+  const latestBooking = getLatestBooking();
+  if (!latestBooking?.code) throw new Error("booking-not-found");
+  const response = await fetch(buildApiUrl("/api/bookings"), {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: latestBooking.code }),
+  });
+  if (!response.ok) throw new Error("booking-cancel-failed");
+  const result = await response.json();
+  return {
+    outcome: result.outcome || null,
+    booking: result.booking || null,
+  };
+}
+
+function clearLatestBookingState() {
+  localStorage.removeItem(BOOKING_STORAGE_KEY);
+  resetBookingDraft();
+}
+
+function restartBookingDraftWithFreshCode() {
+  bookingDraftVersion += 1;
+  state.bookingStep = "deposit";
+  state.bookingError = "";
+  state.bookingFieldErrors = {};
+  state.bookingDraft = {
+    ...state.bookingDraft,
+    code: generateBookingCode(),
+    status: "draft",
+    depositReviewNote: "",
+  };
+  persistLatestBooking();
+}
+
+function shouldRecoverDeletedBookingToDraft() {
+  return Boolean(
+    state.bookingDraft.serviceId
+    || state.bookingDraft.receiptPath
+    || state.bookingDraft.receiptName
+    || bookingModal?.open,
+  );
+}
+
+function recoverBookingDraftAfterRemoval() {
+  if (!shouldRecoverDeletedBookingToDraft()) {
+    clearLatestBookingState();
+    return false;
+  }
+  restartBookingDraftWithFreshCode();
+  return true;
+}
+
+function syncUiAfterBookingRemoval() {
+  const recovered = recoverBookingDraftAfterRemoval();
+  renderHistoryFlow();
+  if (bookingModal?.open && recovered) {
+    renderBookingFlow();
+    return;
+  }
+  if (bookingModal?.open) {
+    bookingModal.close();
+  }
+}
+
+function syncUiAfterCancelledBooking() {
+  const recovered = recoverBookingDraftAfterRemoval();
+  renderHistoryFlow();
+  if (bookingModal?.open && recovered) {
+    renderBookingFlow();
+    return;
+  }
+  if (bookingModal?.open) {
+    bookingModal.close();
+  }
+}
+
+function refreshBookingUiAfterCancel() {
+  syncUiAfterCancelledBooking();
+}
+
+function handleDeletedBookingState() {
+  syncUiAfterBookingRemoval();
+}
+
+function handleMissingBookingState() {
+  syncUiAfterBookingRemoval();
+  if (historyModal?.open) renderHistoryFlow();
+}
+
+function applyCancelledBookingState(booking) {
+  if (!booking) return;
+  syncLatestBookingFromServer(booking);
+  syncUiAfterCancelledBooking();
+}
+
+function getBookingCancelledMessage() {
+  return state.locale === "vi"
+    ? "Booking này không còn hiệu lực. Sam Camping đã xóa hoặc hủy yêu cầu trước đó."
+    : "This booking is no longer active.";
+}
+
+function getBookingCancelErrorMessage() {
+  return state.locale === "vi"
+    ? "Không hủy được booking lúc này. Anh/chị thử lại sau giúp em nhé."
+    : "We couldn't cancel the booking right now. Please try again.";
+}
+
+function getBookingCancelLabel() {
+  return state.locale === "vi" ? "Hủy booking" : "Cancel booking";
+}
+
+function getBookingCloseWaitingLabel() {
+  return state.locale === "vi" ? "Đóng" : "Close";
+}
+
+function clearBookingUiAfterMissing() {
+  clearLatestBookingState();
+  renderHistoryFlow();
+  if (bookingModal?.open) {
+    bookingModal.close();
+  }
+}
+
+function isMissingBookingResult(booking) {
+  return Boolean(booking?.missing);
+}
+
+function shouldAllowBookingCancel(step) {
+  return step === "deposit" || step === "pending";
+}
+
+function getBookingPendingActions() {
+  if (!shouldAllowBookingCancel(state.bookingStep)) return "";
+  return `
+    <div class="booking-actions">
+      <button type="button" class="booking-button--ghost" data-booking-close="dismiss">${getBookingCloseWaitingLabel()}</button>
+      <button type="button" class="booking-button" data-booking-cancel="request">${getBookingCancelLabel()}</button>
+    </div>
+  `;
+}
+
+function getHistoryCancelAction(booking) {
+  if (!isBookingWaitingReview(booking) && booking.status !== "deposit_pending") return "";
+  return `<button type="button" class="booking-button--ghost" data-history-cancel="booking">${escapeHtml(getBookingCancelLabel())}</button>`;
+}
+
+function maybeHandleTerminalBookingState(booking) {
+  if (isMissingBookingResult(booking)) {
+    handleDeletedBookingState();
+    return true;
+  }
+  if (booking?.status === "cancelled") {
+    refreshBookingUiAfterCancel();
+    return true;
+  }
+  return false;
+}
+
+function maybeHandleCancelledBookingOutcome(result) {
+  if (!result) return false;
+  if (result.outcome === "deleted") {
+    handleDeletedBookingState();
+    return true;
+  }
+  if (result.outcome === "cancelled") {
+    if (result.booking) {
+      syncLatestBookingFromServer(result.booking);
+    }
+    refreshBookingUiAfterCancel();
+    return true;
+  }
+  return false;
+}
+
+function isDeletedBookingOutcome(result) {
+  return result?.outcome === "deleted";
+}
+
+function isCancelledBookingOutcome(result) {
+  return result?.outcome === "cancelled";
+}
+
+function getBookingDeletedMessage() {
+  return state.locale === "vi"
+    ? "Booking đã được hủy trước khi xác nhận và không còn hiệu lực."
+    : "The booking was cancelled before confirmation and is no longer active.";
+}
+
+function getBookingCancelledAfterConfirmMessage() {
+  return state.locale === "vi"
+    ? "Booking đã được hủy sau khi xác nhận."
+    : "The booking was cancelled after confirmation.";
+}
+
+function getHistoryMissingMessage() {
+  return getBookingCancelledMessage();
+}
+
+function setHistoryMissingState() {
+  clearLatestBookingState();
+  historyFlow.innerHTML = `
+    <div class="history-empty">
+      ${escapeHtml(getHistoryMissingMessage())}
+    </div>
+  `;
+}
+
+function closeWaitingBookingModal() {
+  if (bookingModal?.open) bookingModal.close();
+}
+
+function renderAfterMissingBooking() {
+  setHistoryMissingState();
+  closeWaitingBookingModal();
+}
+
+function isBookingCancelled(booking) {
+  return booking?.status === "cancelled";
+}
+
+function getHistoryCancelledChip() {
+  return state.locale === "vi" ? "Đã hủy" : "Cancelled";
+}
+
+function getHistoryCancelledDescription() {
+  return getBookingCancelledMessage();
+}
+
+function handleCancelledBookingDisplay(booking) {
+  if (!isBookingCancelled(booking)) return null;
+  return {
+    chip: getHistoryCancelledChip(),
+    description: getHistoryCancelledDescription(),
+  };
+}
+
+function getWaitingBookingDismissAction() {
+  return `<button type="button" class="booking-button--ghost" data-booking-close="dismiss">${getBookingCloseWaitingLabel()}</button>`;
+}
+
+function getWaitingBookingCancelAction() {
+  return `<button type="button" class="booking-button" data-booking-cancel="request">${getBookingCancelLabel()}</button>`;
+}
+
+function getPendingBookingActionBlock() {
+  if (state.bookingStep !== "pending") return "";
+  return `<div class="booking-actions">${getWaitingBookingDismissAction()}${getWaitingBookingCancelAction()}</div>`;
+}
+
+function clearStaleBookingAndShowMessage() {
+  clearLatestBookingState();
+  setBookingError(getBookingCancelledMessage());
+}
+
+function maybeClearStaleBooking(booking) {
+  if (!isMissingBookingResult(booking) && !isBookingCancelled(booking)) return false;
+  clearStaleBookingAndShowMessage();
+  renderAfterMissingBooking();
+  return true;
+}
+
+function getHistoryCardActions(booking, locale) {
+  const paymentAction = booking.status === "deposit_pending" || booking.status === "deposit_verifying" || isBookingRejected(booking)
+    ? `<a class="history-link" href="javascript:void(0)" data-history-payment="view"><i class="fa-solid fa-building-columns"></i><span>${locale.viewTransferInfo}</span></a>`
+    : "";
+  return `${getHistoryReceiptUploadBlock(booking)}${paymentAction}${getHistoryCancelAction(booking)}<a class="booking-button" href="tel:+849680881"><i class="fa-solid fa-phone"></i><span>${locale.callSamCamping}</span></a>`;
+}
+
+function mapBookingStatusFromServer(booking) {
+  if (!booking) return "draft";
+  if (booking.status === "confirmed") return "confirmed";
+  if (booking.depositReviewStatus === "rejected") return "deposit_rejected";
+  if (booking.depositReviewStatus === "submitted") return "deposit_verifying";
+  if (booking.depositSlipPath) return "deposit_pending";
+  return booking.status || "submitted";
+}
+
+function syncLatestBookingFromServer(booking) {
+  const latestBooking = getLatestBooking();
+  if (!latestBooking || !booking) return null;
+
+  const nextStatus = mapBookingStatusFromServer(booking);
+  const shouldForkRejectedBooking = nextStatus === "deposit_rejected" && latestBooking.retryFromCode !== booking.code;
+
+  latestBooking.code = shouldForkRejectedBooking ? generateBookingCode() : (booking.code || latestBooking.code);
+  latestBooking.customerName = booking.customerName || latestBooking.customerName;
+  latestBooking.customerPhone = booking.customerPhone || latestBooking.customerPhone;
+  latestBooking.bookingDate = booking.bookingDate || latestBooking.bookingDate;
+  latestBooking.bookingTime = booking.bookingTime || latestBooking.bookingTime;
+  latestBooking.guestCount = booking.guestCount || latestBooking.guestCount;
+  latestBooking.note = booking.note || latestBooking.note || "";
+  latestBooking.receiptPath = booking.depositSlipPath || latestBooking.receiptPath || "";
+  latestBooking.depositReviewNote = booking.depositReviewNote || "";
+  latestBooking.status = shouldForkRejectedBooking ? "deposit_pending" : nextStatus;
+  latestBooking.statusLabel = getBookingStatusLabel(latestBooking.status);
+  latestBooking.updatedAt = booking.updatedAt || new Date().toISOString();
+  latestBooking.retryFromCode = shouldForkRejectedBooking ? booking.code : (latestBooking.retryFromCode || "");
+  localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(latestBooking));
+  return latestBooking;
+}
+
+async function refreshLatestBookingStatus() {
+  const requestVersion = bookingDraftVersion;
+  const latestBooking = getLatestBooking();
+  if (!latestBooking?.code) return null;
+  const booking = await fetchBookingStatus(latestBooking.code);
+  if (requestVersion !== bookingDraftVersion) {
+    return null;
+  }
+  if (isMissingBookingResult(booking) || booking?.status === "cancelled") {
+    return booking;
+  }
+  return syncLatestBookingFromServer(booking);
+}
+
+let bookingStatusPollTimer = null;
+const BOOKING_STATUS_POLL_INTERVAL_MS = 1000;
+
+function stopBookingStatusPolling() {
+  if (!bookingStatusPollTimer) return;
+  window.clearInterval(bookingStatusPollTimer);
+  bookingStatusPollTimer = null;
+}
+
+function handlePolledBookingStatus(booking) {
+  if (!booking) return;
+  if (maybeHandleTerminalBookingState(booking)) {
+    stopBookingStatusPolling();
+    return;
+  }
+  if (booking.status === "confirmed" || booking.status === "deposit_rejected") {
+    stopBookingStatusPolling();
+  }
+  renderHistoryFlow();
+  if (bookingModal?.open) {
+    if (openBookingFlowForLatestBooking(booking)) {
+      renderBookingFlow();
+    } else {
+      bookingModal.close();
+    }
+  }
+}
+
+function startBookingStatusPolling() {
+  stopBookingStatusPolling();
+  const latestBooking = getLatestBooking();
+  if (!latestBooking?.code) return;
+
+  refreshLatestBookingStatus()
+    .then((booking) => {
+      handlePolledBookingStatus(booking);
+    })
+    .catch(() => {
+    });
+
+  bookingStatusPollTimer = window.setInterval(() => {
+    refreshLatestBookingStatus()
+      .then((booking) => {
+        handlePolledBookingStatus(booking);
+      })
+      .catch(() => {
+      });
+  }, BOOKING_STATUS_POLL_INTERVAL_MS);
+}
+
+function syncBookingUiFromLatestBooking() {
+  const latestBooking = getLatestBooking();
+  if (!latestBooking) return;
+  if (!openBookingFlowForLatestBooking(latestBooking)) {
+    clearNonBlockingLatestBooking();
+    resetBookingDraft();
+  }
+}
+
+function refreshLatestBookingStatusAndRender() {
+  return refreshLatestBookingStatus()
+    .then((booking) => {
+      if (!booking) return null;
+      if (maybeHandleTerminalBookingState(booking)) {
+        return booking;
+      }
+      syncBookingUiFromLatestBooking();
+      renderHistoryFlow();
+      if (bookingModal?.open) renderBookingFlow();
+      return booking;
+    })
+    .catch(() => null);
+}
+
+function attachBookingStatusPolling() {
+  startBookingStatusPolling();
+  attachBookingRealtime();
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopBookingStatusPolling();
+      detachBookingRealtime();
+      return;
+    }
+    refreshLatestBookingStatusAndRender().finally(() => {
+      startBookingStatusPolling();
+      attachBookingRealtime();
+    });
+  });
+}
+
+attachBookingStatusPolling();
 
 function syncBookingDraftFromHistory(latestBooking) {
   if (!latestBooking) return;
   state.bookingDraft = {
     ...state.bookingDraft,
     ...latestBooking,
+    code: latestBooking.code || state.bookingDraft.code || "",
     receiptName: latestBooking.receiptName || "",
     receiptPath: latestBooking.receiptPath || "",
     depositReviewNote: latestBooking.depositReviewNote || "",
@@ -2601,10 +3354,13 @@ function setLatestBookingReceiptState(file, uploadResult) {
 
 function updateRejectedBookingToWaitingReview(latestBooking) {
   if (!latestBooking) return;
-  latestBooking.status = "deposit_verifying";
+  latestBooking.code = generateBookingCode();
+  latestBooking.status = "deposit_pending";
   latestBooking.depositReviewNote = "";
-  latestBooking.statusLabel = getBookingStatusLabel("deposit_verifying");
+  latestBooking.depositReviewedAt = null;
+  latestBooking.depositReviewStatus = "not_submitted";
   latestBooking.updatedAt = new Date().toISOString();
+  latestBooking.statusLabel = getBookingStatusLabel("deposit_pending");
   localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(latestBooking));
 }
 
@@ -2696,7 +3452,7 @@ function canContinueFromDeposit() {
 }
 
 function canResubmitHistoryReceipt(latestBooking) {
-  return isBookingRejected(latestBooking) && hasHistoryReceipt(latestBooking);
+  return latestBooking?.status === "deposit_verifying" && hasHistoryReceipt(latestBooking);
 }
 
 function resetBookingReviewNote() {
@@ -2736,20 +3492,27 @@ function getBookingStatusLabel(status) {
 
 function persistLatestBooking() {
   if (!state.bookingDraft.code) return;
+  sanitizeCurrentBookingDraft();
   const service = findBookingService(state.bookingDraft.serviceId);
-  const payload = {
+  const payload = sanitizeLatestBookingRecord({
     ...state.bookingDraft,
     serviceTitle: service?.title || "",
     statusLabel: getBookingStatusLabel(state.bookingDraft.status),
     updatedAt: new Date().toISOString(),
-  };
+  });
   localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(payload));
 }
 
 function getLatestBooking() {
   try {
     const raw = localStorage.getItem(BOOKING_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const sanitized = sanitizeLatestBookingRecord(parsed);
+    if (sanitized && JSON.stringify(parsed) !== JSON.stringify(sanitized)) {
+      localStorage.setItem(BOOKING_STORAGE_KEY, JSON.stringify(sanitized));
+    }
+    return sanitized;
   } catch {
     return null;
   }
@@ -3042,13 +3805,7 @@ function renderHistoryFlow() {
       </div>
       ${getHistoryRejectedBlock(booking)}
       <div class="history-card__actions">
-        ${getHistoryReceiptUploadBlock(booking)}
-        ${
-          booking.status === "deposit_pending" || booking.status === "deposit_verifying" || isBookingRejected(booking)
-            ? `<a class="history-link" href="javascript:void(0)" data-history-payment="view"><i class="fa-solid fa-building-columns"></i><span>${locale.viewTransferInfo}</span></a>`
-            : ""
-        }
-        <a class="booking-button" href="tel:+849680881"><i class="fa-solid fa-phone"></i><span>${locale.callSamCamping}</span></a>
+        ${getHistoryCardActions(booking, locale)}
       </div>
     </div>
     <div class="history-empty">
@@ -3206,8 +3963,12 @@ function renderBookingFlow() {
   }
 
   if (state.bookingStep === "deposit") {
+    const bookingConfig = getBookingConfig();
     state.bookingDraft.status = "deposit_pending";
     persistLatestBooking();
+    logBookingTrace("render-deposit", {
+      renderedCode: state.bookingDraft.code || "--",
+    });
     bookingFlow.innerHTML = `
       <div class="booking-sheet">
         ${stepBar}
@@ -3216,17 +3977,16 @@ function renderBookingFlow() {
           <p>${localeStrings.depositDesc}</p>
         </div>
         <div class="booking-status-card">
-          <span class="booking-status-chip">${copy.statusRequestSent}</span>
-          <div class="booking-code">${copy.fieldBookingCode}: ${state.bookingDraft.code}</div>
+          <span class="booking-status-chip">${copy.statusAwaitingDeposit}</span>
         </div>
         <div class="deposit-card">
           <h4>${copy.transferInfoTitle}</h4>
+          ${renderDepositQr(bookingConfig, state.bookingDraft.code || "")}
           <div class="deposit-meta">
-            <div class="deposit-meta__item"><span>${copy.depositAmountLabel}</span><strong>100.000đ</strong></div>
-            <div class="deposit-meta__item"><span>${copy.bankLabel}</span><strong>MB Bank</strong></div>
-            <div class="deposit-meta__item"><span>${copy.accountNameLabel}</span><strong>Trịnh Đình Vũ</strong></div>
-            <div class="deposit-meta__item"><span>${copy.accountNumberLabel}</span><strong>09680881</strong></div>
-          <div class="deposit-meta__item"><span>${copy.transferContentLabel}</span><strong>${state.bookingDraft.code}</strong></div>
+            <div class="deposit-meta__item"><span>${copy.depositAmountLabel}</span><strong>${escapeHtml(formatDepositAmount(bookingConfig.depositAmount))}</strong></div>
+            <div class="deposit-meta__item"><span>${copy.bankLabel}</span><strong>${escapeHtml(bookingConfig.bankName)}</strong></div>
+            <div class="deposit-meta__item"><span>${copy.accountNumberLabel}</span><strong>${escapeHtml(bookingConfig.accountNumber)}</strong></div>
+            <div class="deposit-meta__item"><span>${copy.transferContentLabel}</span><strong>${escapeHtml(state.bookingDraft.code || "--")}</strong></div>
           </div>
           <p>${copy.transferNote}</p>
           <label class="booking-upload ${state.bookingDraft.receiptName ? "is-ready" : ""}" for="booking-receipt">
@@ -3264,6 +4024,7 @@ function renderBookingFlow() {
           <p>${copy.fieldService}: ${service?.title || ""}</p>
           <p>${copy.billSentLabel}: ${state.bookingDraft.receiptName}</p>
         </div>
+        ${getPendingBookingActionBlock()}
       </div>
     `;
     return;
@@ -3493,6 +4254,8 @@ document.addEventListener("click", (event) => {
   const bookingCloseButton = target.closest("[data-booking-close]");
   const historyPaymentLink = target.closest("[data-history-payment]");
   const historyResubmitButton = target.closest("[data-history-resubmit]");
+  const bookingCancelButton = target.closest("[data-booking-cancel]");
+  const historyCancelButton = target.closest("[data-history-cancel]");
   const waiterLocationButton = target.closest("[data-waiter-location]");
   const waiterNeedButton = target.closest("[data-waiter-need]");
   const waiterSubmitButton = target.closest("[data-waiter-submit]");
@@ -3523,14 +4286,17 @@ document.addEventListener("click", (event) => {
     const locale = localeButton.dataset.locale;
     if (locale && locales[locale]) {
       state.locale = locale;
-      loadBookingServices()
-        .catch(() => {
+      Promise.all([
+        loadBookingServices().catch(() => {
           state.bookingServices = [];
-        })
-        .finally(() => {
-          renderApp();
-          languageModal.close();
-        });
+        }),
+        loadBookingConfig().catch(() => {
+          state.bookingConfig = { ...DEFAULT_BOOKING_CONFIG };
+        }),
+      ]).finally(() => {
+        renderApp();
+        languageModal.close();
+      });
     }
   }
 
@@ -3561,6 +4327,9 @@ document.addEventListener("click", (event) => {
       }
 
       state.bookingError = "";
+      logBookingTrace("click-submit-deposit", {
+        buttonText: bookingSubmitButton.textContent?.trim() || "",
+      });
       bookingSubmitButton.setAttribute("disabled", "disabled");
       submitBookingDraft()
         .then(() => {
@@ -3569,9 +4338,24 @@ document.addEventListener("click", (event) => {
           renderBookingFlow();
           renderHistoryFlow();
         })
-        .catch(() => {
-          state.bookingError = getBookingSubmitErrorMessage();
+        .catch((error) => {
+          if (isActiveBookingConflictError(error)) {
+            const conflictBooking = error.booking || null;
+            if (conflictBooking && conflictBooking.depositReviewStatus !== "rejected") {
+              const latestBooking = syncLatestBookingRecord(conflictBooking);
+              if (latestBooking && openBookingFlowForLatestBooking(latestBooking)) {
+                state.bookingError = getActiveBookingConflictMessage();
+              } else {
+                state.bookingError = getBookingSubmitErrorMessage();
+              }
+            } else {
+              state.bookingError = getBookingSubmitErrorMessage();
+            }
+          } else {
+            state.bookingError = getBookingSubmitErrorMessage();
+          }
           bookingSubmitButton.removeAttribute("disabled");
+          renderHistoryFlow();
           renderBookingFlow();
         });
       return;
@@ -3619,6 +4403,32 @@ document.addEventListener("click", (event) => {
       });
   }
 
+  if (bookingCancelButton instanceof HTMLElement || historyCancelButton instanceof HTMLElement) {
+    const trigger = bookingCancelButton instanceof HTMLElement ? bookingCancelButton : historyCancelButton;
+    trigger?.setAttribute("disabled", "disabled");
+    cancelLatestBooking()
+      .then((result) => {
+        if (maybeHandleCancelledBookingOutcome(result)) {
+          if (isDeletedBookingOutcome(result)) {
+            setBookingError(getBookingDeletedMessage());
+          } else if (isCancelledBookingOutcome(result)) {
+            setBookingError(getBookingCancelledAfterConfirmMessage());
+          }
+          renderBookingFlow();
+          renderHistoryFlow();
+          return;
+        }
+        refreshBookingUiAfterCancel();
+      })
+      .catch(() => {
+        setBookingError(getBookingCancelErrorMessage());
+        trigger?.removeAttribute("disabled");
+        renderBookingFlow();
+        renderHistoryFlow();
+      });
+    return;
+  }
+
   if (bookingCloseButton instanceof HTMLElement) {
     bookingModal.close();
     resetBookingDraft();
@@ -3631,18 +4441,18 @@ document.addEventListener("click", (event) => {
     state.bookingDraft = {
       ...state.bookingDraft,
       ...latestBooking,
-      serviceId: latestBooking.serviceId || "",
-      customerName: latestBooking.customerName || "",
-      customerPhone: latestBooking.customerPhone || "",
-      bookingDate: latestBooking.bookingDate || "",
-      bookingTime: latestBooking.bookingTime || "",
-      guestCount: latestBooking.guestCount || "2",
-      note: latestBooking.note || "",
-      receiptName: latestBooking.receiptName || "",
-      receiptPath: latestBooking.receiptPath || "",
-      code: latestBooking.code || "",
-      status: latestBooking.status || "submitted",
-      depositReviewNote: latestBooking.depositReviewNote || "",
+      serviceId: latestBooking.serviceId || state.bookingDraft.serviceId || "",
+      customerName: latestBooking.customerName || state.bookingDraft.customerName || "",
+      customerPhone: latestBooking.customerPhone || state.bookingDraft.customerPhone || "",
+      bookingDate: latestBooking.bookingDate || state.bookingDraft.bookingDate || "",
+      bookingTime: latestBooking.bookingTime || state.bookingDraft.bookingTime || "",
+      guestCount: latestBooking.guestCount || state.bookingDraft.guestCount || "2",
+      note: latestBooking.note || state.bookingDraft.note || "",
+      receiptName: latestBooking.receiptName || state.bookingDraft.receiptName || "",
+      receiptPath: latestBooking.receiptPath || state.bookingDraft.receiptPath || "",
+      code: latestBooking.code || state.bookingDraft.code || "",
+      status: latestBooking.status || state.bookingDraft.status || "submitted",
+      depositReviewNote: latestBooking.depositReviewNote || state.bookingDraft.depositReviewNote || "",
     };
     state.bookingStep = "deposit";
     historyModal.close();
@@ -3741,6 +4551,9 @@ document.addEventListener("change", (event) => {
         if (!latestBooking) return;
         updateRejectedBookingToWaitingReview(latestBooking);
         syncBookingDraftFromHistory(latestBooking);
+        state.bookingDraft.code = latestBooking.code || state.bookingDraft.code;
+        state.bookingDraft.status = latestBooking.status || state.bookingDraft.status;
+        state.bookingDraft.depositReviewNote = latestBooking.depositReviewNote || "";
         renderHistoryFlow();
       })
       .catch(() => {
@@ -3771,14 +4584,53 @@ languageTrigger.addEventListener("click", () => {
 });
 
 bookingTrigger.addEventListener("click", () => {
+  const latestBooking = getLatestBooking();
+  if (shouldResumeLatestBooking(latestBooking)) {
+    syncBookingUiFromLatestBooking();
+    refreshLatestBookingStatusAndRender().finally(() => {
+      const nextBooking = getLatestBooking();
+      if (shouldResumeLatestBooking(nextBooking)) {
+        syncBookingUiFromLatestBooking();
+      } else {
+        clearNonBlockingLatestBooking();
+        resetBookingDraft();
+      }
+      renderBookingFlow();
+      bookingModal.showModal();
+      startBookingStatusPolling();
+      attachBookingRealtime();
+    });
+    return;
+  }
+
+  clearNonBlockingLatestBooking();
   resetBookingDraft();
   renderBookingFlow();
   bookingModal.showModal();
+  attachBookingRealtime();
 });
 
 historyTrigger.addEventListener("click", () => {
-  renderHistoryFlow();
-  historyModal.showModal();
+  refreshLatestBookingStatusAndRender().finally(() => {
+    renderHistoryFlow();
+    historyModal.showModal();
+    startBookingStatusPolling();
+    attachBookingRealtime();
+  });
+});
+
+bookingModal?.addEventListener("close", () => {
+  stopBookingStatusPolling();
+  if (!historyModal?.open) {
+    detachBookingRealtime();
+  }
+});
+
+historyModal?.addEventListener("close", () => {
+  stopBookingStatusPolling();
+  if (!bookingModal?.open) {
+    detachBookingRealtime();
+  }
 });
 
 callWaiterTrigger.addEventListener("click", () => {
@@ -3803,13 +4655,16 @@ infoTrigger.addEventListener("keydown", (event) => {
   }
 });
 
-loadBookingServices()
-  .catch(() => {
+Promise.all([
+  loadBookingServices().catch(() => {
     state.bookingServices = [];
-  })
-  .finally(() => {
-    renderApp();
-  });
+  }),
+  loadBookingConfig().catch(() => {
+    state.bookingConfig = { ...DEFAULT_BOOKING_CONFIG };
+  }),
+]).finally(() => {
+  renderApp();
+});
 
 
 

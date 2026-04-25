@@ -40,6 +40,7 @@ const navItems = [
   { href: "/waiter-requests", label: "Gọi nhân viên", icon: BellRing },
   { href: "/tables", label: "Bàn / Khu vực", icon: Map },
   { href: "/services", label: "Dịch vụ", icon: UtensilsCrossed },
+  { href: "/booking-settings", label: "Cấu hình chuyển khoản", icon: BellRing },
 ] as const;
 
 function buildBookingNotification(booking: {
@@ -99,13 +100,21 @@ function compareNotificationDate(left: AdminNotificationItem, right: AdminNotifi
   return right.createdAt.localeCompare(left.createdAt);
 }
 
+function hasDepositReviewStatus(
+  booking: Awaited<ReturnType<typeof safeDashboardSnapshot>>["bookingList"][number],
+): booking is Awaited<ReturnType<typeof safeDashboardSnapshot>>["bookingList"][number] & {
+  depositReviewStatus: "not_submitted" | "submitted" | "approved" | "rejected";
+} {
+  return "depositReviewStatus" in booking;
+}
+
 async function getNotificationItems() {
   noStore();
   const snapshot = await safeDashboardSnapshot();
 
   return [
     ...snapshot.bookingList
-      .filter((booking) => booking.depositReviewStatus === "submitted" || booking.status === "pending")
+      .filter((booking) => (hasDepositReviewStatus(booking) && booking.depositReviewStatus === "submitted") || booking.status === "pending")
       .slice(0, 4)
       .map((booking) => buildBookingNotification(booking)),
     ...snapshot.waiterList
@@ -138,6 +147,7 @@ export async function AdminShell({
         events={[
           REALTIME_EVENTS.bookingCreated,
           REALTIME_EVENTS.bookingUpdated,
+          REALTIME_EVENTS.bookingDeleted,
           REALTIME_EVENTS.waiterRequestCreated,
           REALTIME_EVENTS.waiterRequestUpdated,
         ]}

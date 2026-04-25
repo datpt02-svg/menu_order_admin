@@ -5,6 +5,7 @@ import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
+  bookingConfigs,
   bookingStatusHistory,
   bookings,
   services,
@@ -16,7 +17,7 @@ import {
   waiterRequests,
   zones,
 } from "@/db/schema";
-import { saveBooking, saveWaiterRequest, buildServiceSlug } from "@/lib/server/booking-service";
+import { saveBooking, saveWaiterRequest } from "@/lib/server/booking-service";
 
 function valueOf(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -31,16 +32,6 @@ function optionalValue(formData: FormData, key: string) {
 function numberValue(formData: FormData, key: string, fallback = 0) {
   const value = Number(valueOf(formData, key));
   return Number.isFinite(value) ? value : fallback;
-}
-
-function slugify(input: string) {
-  return input
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 160);
 }
 
 function buildCode(prefix: string) {
@@ -159,6 +150,14 @@ type BookingValidationPayload = {
   depositReviewedAt?: Date | null;
   depositReviewNote?: string | null;
   note: string | null;
+};
+
+type BookingConfigValidationPayload = {
+  depositAmount: number;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  updatedAt: Date;
 };
 
 const SERVICE_ORDER_PARKED_VALUE = 0;
@@ -299,7 +298,8 @@ async function validateServiceForm(formData: FormData): Promise<{ result: Valida
   const description = trimOptionalString(valueOf(formData, "description"), 2000);
   const priceLabel = valueOf(formData, "priceLabel");
   const imagePath = trimOptionalString(valueOf(formData, "imagePath"), 500);
-  const zoneSlug = trimOptionalString(valueOf(formData, "zoneSlug"), 120);
+  const rawZoneSlug = trimOptionalString(valueOf(formData, "zoneSlug"), 120);
+  const zoneSlug = rawZoneSlug === "all" ? null : rawZoneSlug;
   const sortOrderRaw = valueOf(formData, "sortOrder");
   const sortOrder = Number(sortOrderRaw || "1");
   const localeKeys = ["vi", "en", "zh", "ko", "ja"] as const;
@@ -340,7 +340,14 @@ async function validateServiceForm(formData: FormData): Promise<{ result: Valida
     fieldErrors.imagePath = "Ảnh phải là đường dẫn nội bộ bắt đầu bằng / hoặc URL http/https hợp lệ.";
   }
   if (zoneSlug && !SLUG_PATTERN.test(zoneSlug)) {
-    fieldErrors.zoneSlug = "Zone slug không hợp lệ.";
+    fieldErrors.zoneSlug = "Khu vực không hợp lệ.";
+  }
+
+  if (zoneSlug && !fieldErrors.zoneSlug) {
+    const zoneRows = await db.select({ id: zones.id }).from(zones).where(eq(zones.slug, zoneSlug)).limit(1);
+    if (!zoneRows[0]) {
+      fieldErrors.zoneSlug = "Khu vực không tồn tại.";
+    }
   }
 
   if (!fieldErrors.slug && slug) {
@@ -484,6 +491,53 @@ async function validateBookingForm(formData: FormData): Promise<{ result: Valida
   };
 }
 
+const BOOKING_CONFIG_BANK_OPTIONS = [
+  { code: "mbbank", name: "MB Bank" },
+  { code: "vietcombank", name: "Vietcombank" },
+  { code: "vietinbank", name: "VietinBank" },
+  { code: "bidv", name: "BIDV" },
+  { code: "agribank", name: "Agribank" },
+  { code: "acb", name: "ACB" },
+  { code: "tpbank", name: "TPBank" },
+  { code: "techcombank", name: "Techcombank" },
+] as const;
+
+async function validateBookingConfigForm(formData: FormData): Promise<{ result: ValidationResult; payload?: BookingConfigValidationPayload }> {
+  const depositAmountRaw = valueOf(formData, "depositAmount");
+  const depositAmount = Number(depositAmountRaw);
+  const bankCode = valueOf(formData, "bankCode").toLowerCase();
+  const accountNumber = valueOf(formData, "accountNumber");
+  const fieldErrors: Record<string, string> = {};
+  const selectedBank = BOOKING_CONFIG_BANK_OPTIONS.find((bank) => bank.code === bankCode);
+
+  if (!Number.isInteger(depositAmount) || depositAmount < 1) {
+    fieldErrors.depositAmount = "Số tiền cọc phải là số nguyên lớn hơn 0.";
+  }
+  if (!selectedBank) {
+    fieldErrors.bankName = "Vui lòng chọn ngân hàng từ danh sách hỗ trợ VietQR.";
+  }
+  if (!accountNumber) {
+    fieldErrors.accountNumber = "Số tài khoản là bắt buộc.";
+  } else if (accountNumber.length > 50) {
+    fieldErrors.accountNumber = "Số tài khoản không được vượt quá 50 ký tự.";
+  }
+
+  if (Object.keys(fieldErrors).length || !selectedBank) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại cấu hình chuyển khoản.") };
+  }
+
+  return {
+    result: { ok: true },
+    payload: {
+      depositAmount,
+      bankName: selectedBank.name,
+      bankCode: selectedBank.code,
+      accountNumber,
+      updatedAt: new Date(),
+    },
+  };
+}
+
 async function revalidateStaffPages() {
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
@@ -540,8 +594,16 @@ export async function saveBookingAction(formData: FormData): Promise<ValidationR
   return { ok: true };
 }
 
+function logBookingAdmin(label: string, data: Record<string, unknown>) {
+  console.log(`[booking-admin] ${label}`, data);
+}
+
 export async function reviewBookingDepositAction(formData: FormData): Promise<ValidationResult> {
   const id = numberValue(formData, "id");
+  logBookingAdmin("review:start", {
+    id,
+    decision: valueOf(formData, "decision") || "",
+  });
   if (!id) {
     return { ok: false, formError: "Không tìm thấy booking cần duyệt bill cọc." };
   }
@@ -550,9 +612,6 @@ export async function reviewBookingDepositAction(formData: FormData): Promise<Va
   const depositReviewNote = trimOptionalString(valueOf(formData, "depositReviewNote"), 1000);
   if (decision !== "approved" && decision !== "rejected") {
     return { ok: false, formError: "Quyết định duyệt bill cọc không hợp lệ." };
-  }
-  if (decision === "rejected" && !depositReviewNote) {
-    return { ok: false, fieldErrors: { depositReviewNote: "Cần nhập lý do từ chối bill cọc." } };
   }
 
   const bookingRows = await db
@@ -577,6 +636,7 @@ export async function reviewBookingDepositAction(formData: FormData): Promise<Va
 
   const nextStatus = decision === "approved" ? "confirmed" : booking.status;
   const reviewedAt = new Date();
+  const nextCode = booking.code;
 
   await db
     .update(bookings)
@@ -603,10 +663,19 @@ export async function reviewBookingDepositAction(formData: FormData): Promise<Va
     : [];
 
   const { broadcastRealtimeEvent, REALTIME_EVENTS } = await import("@/lib/server/realtime-events");
+  logBookingAdmin("review:broadcast", {
+    id,
+    code: nextCode,
+    previousCode: booking.code,
+    decision,
+    nextStatus,
+  });
   broadcastRealtimeEvent(REALTIME_EVENTS.bookingUpdated, {
     id,
-    code: booking.code,
+    code: nextCode,
+    previousCode: booking.code,
     status: nextStatus,
+    depositReviewStatus: decision,
     zoneName: zoneRows[0]?.name ?? null,
     tableCode: tableRows[0]?.code ?? null,
     updatedAt: reviewedAt.toISOString(),
@@ -630,6 +699,41 @@ export async function saveServiceAction(formData: FormData): Promise<ValidationR
 
   revalidatePath("/dashboard");
   revalidatePath("/services");
+  return { ok: true };
+}
+
+async function ensureBookingConfigTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS booking_configs (
+      id serial PRIMARY KEY,
+      deposit_amount integer NOT NULL,
+      bank_name varchar(120) NOT NULL,
+      bank_code varchar(40) NOT NULL DEFAULT 'mbbank',
+      account_number varchar(50) NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+}
+
+export async function saveBookingConfigAction(formData: FormData): Promise<ValidationResult> {
+  const { result, payload } = await validateBookingConfigForm(formData);
+  if (!result.ok || !payload) {
+    return result;
+  }
+
+  await ensureBookingConfigTable();
+
+  const rows = await db.select({ id: bookingConfigs.id }).from(bookingConfigs).orderBy(asc(bookingConfigs.id)).limit(1);
+  const existingId = rows[0]?.id;
+
+  if (existingId) {
+    await db.update(bookingConfigs).set(payload).where(eq(bookingConfigs.id, existingId));
+  } else {
+    await db.insert(bookingConfigs).values(payload);
+  }
+
+  revalidatePath("/booking-settings");
   return { ok: true };
 }
 
@@ -664,9 +768,44 @@ export async function saveWaiterRequestAction(formData: FormData) {
 
 export async function deleteBookingAction(formData: FormData) {
   const id = numberValue(formData, "id");
+  logBookingAdmin("delete:start", { id });
   if (!id) return;
 
+  const bookingRows = await db
+    .select({
+      id: bookings.id,
+      code: bookings.code,
+      customerName: bookings.customerName,
+      bookingDate: bookings.bookingDate,
+      bookingTime: bookings.bookingTime,
+      updatedAt: bookings.updatedAt,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, id))
+    .limit(1);
+  const booking = bookingRows[0];
+  if (!booking) return;
+
   await db.delete(bookings).where(eq(bookings.id, id));
+
+  const { broadcastRealtimeEvent, REALTIME_EVENTS } = await import("@/lib/server/realtime-events");
+  logBookingAdmin("delete:broadcast", {
+    id: booking.id,
+    code: booking.code,
+    source: "admin_delete",
+  });
+  broadcastRealtimeEvent(REALTIME_EVENTS.bookingDeleted, {
+    id: booking.id,
+    code: booking.code,
+    status: "deleted",
+    customerName: booking.customerName,
+    bookingDate: booking.bookingDate,
+    bookingTime: booking.bookingTime,
+    deletedAt: new Date().toISOString(),
+    source: "admin_delete",
+    updatedAt: booking.updatedAt.toISOString(),
+  });
+
   revalidatePath("/dashboard");
   revalidatePath("/bookings");
   revalidatePath("/calendar");

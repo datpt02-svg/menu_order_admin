@@ -1,4 +1,5 @@
 import type {
+  bookingConfigs,
   bookings,
   services,
   staffAssignments,
@@ -14,6 +15,8 @@ export type BookingRow = typeof bookings.$inferSelect & {
   tableCode?: string | null;
   depositSlipUrl?: string | null;
 };
+
+export type BookingConfigRow = typeof bookingConfigs.$inferSelect;
 
 export type WaiterRow = typeof waiterRequests.$inferSelect & {
   zoneName?: string | null;

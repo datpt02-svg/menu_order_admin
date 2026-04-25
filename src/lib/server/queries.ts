@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
+  bookingConfigs,
   bookings,
   services,
   staffAssignments,
@@ -11,7 +12,13 @@ import {
   waiterRequests,
   zones,
 } from "@/db/schema";
+import {
+  applyBookingFilters,
+  sortBookingsForAttention,
+  type BookingFilterInput,
+} from "@/lib/bookings";
 import type {
+  BookingConfigRow,
   BookingRow,
   ServiceRow,
   StaffAssignmentRow,
@@ -21,6 +28,20 @@ import type {
   WaiterRow,
   ZoneRow,
 } from "@/lib/server/serializers";
+
+export {
+  buildBookingExportFilename,
+  formatBookingReviewTimestamp,
+  getBookingFilterSummary,
+  getBookingStatusLabel,
+  getBookingTableFallback,
+  getBookingZoneFallback,
+  getDepositReviewStatusLabel,
+  hasBookingFilters,
+  mapBookingToExportRow,
+  parseBookingFilterInput,
+  type BookingExportRow,
+} from "@/lib/bookings";
 
 function compareDateTime(date: string, time: string) {
   return `${date}T${time}`;
@@ -135,6 +156,16 @@ export async function getBookings(): Promise<BookingRow[]> {
   return rows satisfies BookingRow[];
 }
 
+export async function getFilteredBookings(filters: BookingFilterInput) {
+  const [bookingList, zoneList] = await Promise.all([getBookings(), getZones()]);
+  const filteredBookings = applyBookingFilters(bookingList, zoneList, filters);
+
+  return {
+    bookings: sortBookingsForAttention(filteredBookings),
+    zones: zoneList,
+  };
+}
+
 export async function getWaiterRequests(): Promise<WaiterRow[]> {
   const rows = await db
     .select({
@@ -186,6 +217,11 @@ export async function getBookingServices(): Promise<ServiceRow[]> {
     .from(services)
     .where(and(eq(services.visible, true), eq(services.bookingEnabled, true)))
     .orderBy(asc(services.sortOrder), asc(services.name), asc(services.id));
+}
+
+export async function getBookingConfig(): Promise<BookingConfigRow | null> {
+  const rows = await db.select().from(bookingConfigs).orderBy(asc(bookingConfigs.id)).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getStaffMembers(): Promise<StaffMemberRow[]> {

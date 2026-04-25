@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -106,6 +106,34 @@ export function StaffContent({ initialData }: StaffContentProps) {
   // Delete confirm state
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; type: "staff" | "shift" | "assignment" } | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [preferredZoneFilter, setPreferredZoneFilter] = useState("all");
+
+  const selectedZoneName = useMemo(
+    () => zoneList.find((zone) => zone.slug === preferredZoneFilter)?.name ?? null,
+    [preferredZoneFilter, zoneList],
+  );
+
+  const filteredStaffList = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+
+    return staffList.filter((staff) => {
+      const matchesKeyword =
+        normalizedKeyword.length === 0 ||
+        staff.fullName.toLowerCase().includes(normalizedKeyword) ||
+        staff.code.toLowerCase().includes(normalizedKeyword) ||
+        staff.phone.toLowerCase().includes(normalizedKeyword);
+      const matchesRole = roleFilter === "all" || staff.role === roleFilter;
+      const matchesStatus = statusFilter === "all" || staff.status === statusFilter;
+      const matchesPreferredZone =
+        preferredZoneFilter === "all" ||
+        (selectedZoneName !== null && staff.preferredZoneName === selectedZoneName);
+
+      return matchesKeyword && matchesRole && matchesStatus && matchesPreferredZone;
+    });
+  }, [keyword, preferredZoneFilter, roleFilter, selectedZoneName, staffList, statusFilter]);
 
   const handleEdit = (type: "staff" | "shift" | "assignment", item: StaffItem | ShiftItem | AssignmentItem) => {
     setSelectedItem(item);
@@ -147,11 +175,11 @@ export function StaffContent({ initialData }: StaffContentProps) {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div>
               <FieldLabel>Từ khóa</FieldLabel>
-              <Input placeholder="Tên / mã / số điện thoại" />
+              <Input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tên / mã / số điện thoại" />
             </div>
             <div>
               <FieldLabel>Vai trò</FieldLabel>
-              <Select defaultValue="all">
+              <Select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
                 <option value="all">Tất cả vai trò</option>
                 <option value="manager">Quản lý</option>
                 <option value="service">Phục vụ</option>
@@ -162,7 +190,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
             </div>
             <div>
               <FieldLabel>Trạng thái</FieldLabel>
-              <Select defaultValue="all">
+              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option value="all">Tất cả trạng thái</option>
                 <option value="active">Đang hoạt động</option>
                 <option value="inactive">Tạm nghỉ</option>
@@ -170,7 +198,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
             </div>
             <div>
               <FieldLabel>Khu vực ưu tiên</FieldLabel>
-              <Select defaultValue="all">
+              <Select value={preferredZoneFilter} onChange={(event) => setPreferredZoneFilter(event.target.value)}>
                 <option value="all">Tất cả khu vực</option>
                 {zoneList.map((zone) => (
                   <option key={zone.id} value={zone.slug}>{zone.name}</option>
@@ -185,9 +213,9 @@ export function StaffContent({ initialData }: StaffContentProps) {
         {/* Block 1: Danh sách nhân viên */}
         <Card>
           <CardContent>
-            <SectionHeading 
-              title="Danh sách nhân viên" 
-              description="Chỉ cần đủ thông tin vận hành để phân ca, bật/tắt active và đưa vào calendar staffing." 
+            <SectionHeading
+              title="Danh sách nhân viên"
+              description="Chỉ cần đủ thông tin vận hành để phân ca, bật/tắt active và đưa vào calendar staffing."
               actions={
                 <Button onClick={() => handleAdd("staff")}>
                   <Plus className="h-4 w-4" />
@@ -195,6 +223,9 @@ export function StaffContent({ initialData }: StaffContentProps) {
                 </Button>
               }
             />
+            <div className="mb-3 text-sm font-medium text-[var(--muted)]">
+              {filteredStaffList.length} / {staffList.length} nhân viên
+            </div>
             <div className="overflow-x-auto admin-scrollbar">
               <table className="min-w-full text-sm">
                 <thead>
@@ -208,30 +239,38 @@ export function StaffContent({ initialData }: StaffContentProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {staffList.map((staff) => (
-                    <tr key={staff.id} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40">
-                      <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)]">{staff.code}</td>
-                      <td className="py-4 pr-4">
-                        <div className="font-semibold text-[var(--forest-dark)]">{staff.fullName}</div>
-                        <div className="text-[var(--muted)]">{staff.phone}</div>
-                      </td>
-                      <td className="py-4 pr-4 text-[var(--forest)]">{getRoleLabel(staff.role)}</td>
-                      <td className="py-4 pr-4 text-[var(--muted)]">{staff.preferredZoneName ?? "Linh hoạt"}</td>
-                      <td className="py-4">
-                        <Badge tone={getStatusTone(staff.status)}>{staff.status}</Badge>
-                      </td>
-                      <td className="py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon-sm" onClick={() => handleEdit("staff", staff)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(staff.id, "staff")}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                  {filteredStaffList.length > 0 ? (
+                    filteredStaffList.map((staff) => (
+                      <tr key={staff.id} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40">
+                        <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)]">{staff.code}</td>
+                        <td className="py-4 pr-4">
+                          <div className="font-semibold text-[var(--forest-dark)]">{staff.fullName}</div>
+                          <div className="text-[var(--muted)]">{staff.phone}</div>
+                        </td>
+                        <td className="py-4 pr-4 text-[var(--forest)]">{getRoleLabel(staff.role)}</td>
+                        <td className="py-4 pr-4 text-[var(--muted)]">{staff.preferredZoneName ?? "Linh hoạt"}</td>
+                        <td className="py-4">
+                          <Badge tone={getStatusTone(staff.status)}>{staff.status}</Badge>
+                        </td>
+                        <td className="py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon-sm" onClick={() => handleEdit("staff", staff)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon-sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(staff.id, "staff")}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-sm text-[var(--muted)]">
+                        Không có nhân viên nào khớp bộ lọc hiện tại.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

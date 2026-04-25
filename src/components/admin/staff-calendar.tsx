@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type MutableRefObject, type ReactNode } from "react";
 import FullCalendar from "@fullcalendar/react";
 import type { CalendarApi } from "@fullcalendar/core";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DateSelectArg, EventChangeArg, EventClickArg, EventDropArg, EventInput } from "@fullcalendar/core";
-import { AlertTriangle, CalendarRange, Filter, LoaderCircle, UsersRound } from "lucide-react";
+import { AlertTriangle, CalendarRange, Expand, Filter, LoaderCircle, Minimize, UsersRound } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldLabel, Select } from "@/components/ui/field";
+import { Modal } from "@/components/ui/modal";
 
 type BookingItem = {
   id: number;
@@ -117,6 +118,27 @@ type StaffCalendarProps = {
   setStaffAssignmentStatusAction: (formData: FormData) => Promise<void>;
 };
 
+type CalendarViewportState = {
+  currentDate: Date;
+  currentView: string;
+};
+
+type StaffCalendarSurfaceProps = {
+  calendarRef: MutableRefObject<FullCalendar | null>;
+  isPending: boolean;
+  events: EventInput[];
+  onDateSelect: (info: DateSelectArg) => void;
+  onEventClick: (info: EventClickArg) => void;
+  onEventDrop: (info: EventDropArg) => void;
+  onEventResize: (info: EventChangeArg) => void;
+  onToggleExpand: () => void;
+  expandLabel: string;
+  showExpandControl?: boolean;
+  initialView: string;
+  initialDate: Date;
+  isExpanded?: boolean;
+};
+
 function addNinetyMinutes(date: string, time: string) {
   const start = new Date(`${date}T${time}:00`);
   return new Date(start.getTime() + 90 * 60 * 1000).toISOString();
@@ -126,17 +148,241 @@ function getStatusTone(status: string) {
   if (status === "pending" || status === "assigned") return "warning" as const;
   if (status === "confirmed") return "success" as const;
   if (status === "seated") return "info" as const;
-  if (status === "absent") return "danger" as const;
+  if (status === "absent" || status === "cancelled" || status === "no_show") return "danger" as const;
   return "default" as const;
 }
 
-function SubmitButton({ children }: { children: React.ReactNode }) {
+function getRoleLabel(role: string) {
+  if (role === "manager") return "Quản lý";
+  if (role === "service") return "Phục vụ";
+  if (role === "kitchen") return "Bếp";
+  if (role === "cashier") return "Thu ngân";
+  if (role === "support") return "Hỗ trợ";
+  return role;
+}
+
+function getBookingStatusLabel(status: string) {
+  if (status === "pending") return "Chờ xác nhận";
+  if (status === "confirmed") return "Đã xác nhận";
+  if (status === "seated") return "Đã check-in";
+  if (status === "completed") return "Hoàn tất";
+  if (status === "cancelled") return "Đã hủy";
+  if (status === "no_show") return "Không đến";
+  return status;
+}
+
+function getZoneFilterValue(zoneName: string | null) {
+  return zoneName ?? "Toàn khu";
+}
+
+function SubmitButton({ children }: { children: ReactNode }) {
   const { pending } = useFormStatus();
 
   return (
     <Button type="submit" variant="secondary" className="w-full" disabled={pending}>
       {pending ? "Đang lưu..." : children}
     </Button>
+  );
+}
+
+function StaffCalendarSurface({
+  calendarRef,
+  isPending,
+  events,
+  onDateSelect,
+  onEventClick,
+  onEventDrop,
+  onEventResize,
+  onToggleExpand,
+  expandLabel,
+  showExpandControl = true,
+  initialView,
+  initialDate,
+  isExpanded = false,
+}: StaffCalendarSurfaceProps) {
+  return (
+    <div className={`calendar-surface ${isExpanded ? "calendar-surface--expanded " : ""}overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ${isExpanded ? "h-full p-3 md:p-4" : "p-4"}`}>
+      {showExpandControl ? (
+        <div className="calendar-expand-control">
+          <Button
+            variant={isExpanded ? "secondary" : "outline"}
+            size="icon"
+            onClick={onToggleExpand}
+            aria-label={expandLabel}
+            title={expandLabel}
+          >
+            {isExpanded ? <Minimize /> : <Expand />}
+          </Button>
+        </div>
+      ) : null}
+      <style>{`
+        .fc {
+          --fc-border-color: rgba(63,111,66,0.12);
+          --fc-page-bg-color: transparent;
+          --fc-neutral-bg-color: rgba(220,239,214,0.25);
+          --fc-today-bg-color: rgba(205,229,195,0.45);
+          --fc-button-bg-color: #3f6f42;
+          --fc-button-border-color: #3f6f42;
+          --fc-button-hover-bg-color: #26482b;
+          --fc-button-hover-border-color: #26482b;
+          --fc-button-active-bg-color: #26482b;
+          --fc-button-active-border-color: #26482b;
+          --fc-event-text-color: #f8fff5;
+        }
+        .fc .fc-toolbar {
+          gap: 0.75rem;
+        }
+        .fc .fc-toolbar-title {
+          font-family: var(--font-charm), sans-serif;
+          color: var(--forest-dark);
+          font-size: 1.8rem;
+          font-weight: 700;
+        }
+        .fc .fc-col-header-cell-cushion,
+        .fc .fc-daygrid-day-number,
+        .fc .fc-timegrid-slot-label-cushion,
+        .fc .fc-timegrid-axis-cushion {
+          color: var(--text);
+        }
+        .fc .fc-event {
+          border-radius: 14px;
+          box-shadow: 0 10px 22px rgba(45,82,44,0.12);
+          border: none;
+          padding: 2px 4px;
+        }
+        .fc .booking-event {
+          background: linear-gradient(135deg, #6e9565, #87ab7f);
+        }
+        .fc .assignment-event {
+          background: linear-gradient(135deg, #2f5d62, #4a8088);
+        }
+        .fc .assignment-event--highlighted {
+          box-shadow: 0 0 0 3px rgba(244,226,155,0.95), 0 14px 28px rgba(45,82,44,0.24);
+          transform: scale(1.02);
+        }
+        .fc .fc-button {
+          border-radius: 999px;
+          box-shadow: 0 10px 24px rgba(45,82,44,0.14);
+          text-transform: capitalize;
+        }
+        .fc .fc-button-group {
+          gap: 0.35rem;
+          border-radius: 999px;
+          padding: 0.3rem;
+          background: rgba(255,255,255,0.72);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+        }
+        .fc .fc-button-group > .fc-button {
+          border-radius: 999px !important;
+          border: none;
+          background: transparent;
+          color: var(--forest-dark);
+          box-shadow: none;
+        }
+        .fc .fc-button-group > .fc-button:hover,
+        .fc .fc-button-group > .fc-button:focus-visible {
+          background: rgba(110,149,101,0.16);
+          color: var(--forest-dark);
+          box-shadow: none;
+        }
+        .fc .fc-button-group > .fc-button.fc-button-active {
+          background: linear-gradient(135deg, #3f6f42, #5e8b56);
+          border: none;
+          outline: none;
+          color: #f8fff5;
+          box-shadow: 0 10px 18px rgba(45,82,44,0.2);
+        }
+        .fc .fc-button-group > .fc-button.fc-button-active:hover {
+          background: linear-gradient(135deg, #365f39, #4f7848);
+          color: #f8fff5;
+        }
+        .fc .fc-button-group > .fc-button.fc-button-active:focus,
+        .fc .fc-button-group > .fc-button.fc-button-active:focus-visible {
+          outline: none;
+          box-shadow: 0 10px 18px rgba(45,82,44,0.2);
+        }
+        .fc .fc-button-primary:not(:disabled).fc-button-active:focus,
+        .fc .fc-button-primary:not(:disabled).fc-button-active:focus-visible {
+          outline: none;
+          box-shadow: 0 10px 18px rgba(45,82,44,0.2);
+        }
+        .calendar-expand-control {
+          position: absolute;
+          top: 1rem;
+          right: 1rem;
+          z-index: 5;
+        }
+        .calendar-expand-control button {
+          min-height: 2.75rem;
+          min-width: 2.75rem;
+          border-radius: 999px;
+        }
+        .calendar-expand-control .lucide {
+          height: 1rem;
+          width: 1rem;
+        }
+        .calendar-surface--expanded .calendar-expand-control {
+          right: 0.75rem;
+        }
+        .calendar-surface--expanded .fc .fc-toolbar {
+          padding-right: 3.75rem;
+        }
+        @media (max-width: 768px) {
+          .calendar-expand-control {
+            top: 0.75rem;
+            right: 0.75rem;
+          }
+          .fc .fc-toolbar {
+            padding-right: 0;
+          }
+        }
+        @media (max-width: 640px) {
+          .calendar-expand-control {
+            position: static;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: flex-end;
+          }
+        }
+        @media (max-width: 768px) {
+          .fc .fc-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .fc .fc-toolbar-chunk {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          }
+          .fc .fc-toolbar-title {
+            text-align: center;
+            font-size: 1.45rem;
+          }
+        }
+      `}</style>
+      <FullCalendar
+        ref={calendarRef}
+        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        initialView={initialView}
+        initialDate={initialDate}
+        headerToolbar={{
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay",
+        }}
+        editable={!isPending}
+        selectable
+        eventDurationEditable
+        height="auto"
+        contentHeight={undefined}
+        events={events}
+        select={onDateSelect}
+        eventClick={onEventClick}
+        eventDrop={onEventDrop}
+        eventResize={onEventResize}
+      />
+    </div>
   );
 }
 
@@ -168,15 +414,27 @@ export function StaffCalendar({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [draftAssignment, setDraftAssignment] = useState<{ shiftDate: string; startTime: string; endTime: string } | null>(null);
   const [highlightedAssignmentId, setHighlightedAssignmentId] = useState<number | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const calendarRef = useRef<FullCalendar | null>(null);
   const pendingCreatedAssignmentIdRef = useRef<number | null>(null);
   const previousAssignmentIdsRef = useRef<string>(assignmentList.map((assignment) => assignment.id).join(","));
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calendarApiRef = useRef<CalendarApi | null>(null);
+  const calendarViewportStateRef = useRef<CalendarViewportState | null>(null);
+  const [calendarViewportState, setCalendarViewportState] = useState<CalendarViewportState>({
+    currentDate: new Date(),
+    currentView: "timeGridWeek",
+  });
+  const surfaceKey = isExpanded ? "expanded" : "default";
+  const calendarContainerClassName = isExpanded ? "min-h-[72vh]" : "";
+  const calendarSummary = isExpanded
+    ? "Chế độ mở rộng giúp kéo thả chính xác hơn trên khung giờ dày."
+    : "Mở rộng lịch để có thêm không gian kéo thả nhân sự.";
+  const expandButtonLabel = isExpanded ? "Thu gọn lịch" : "Mở rộng lịch";
   const filteredBookings = useMemo(
     () =>
       bookingList.filter((booking) => {
-        if (zoneFilter !== "all" && booking.zoneName !== zoneFilter) return false;
+        if (zoneFilter !== "all" && getZoneFilterValue(booking.zoneName) !== zoneFilter) return false;
         if (bookingStatusFilter !== "all" && booking.status !== bookingStatusFilter) return false;
         return true;
       }),
@@ -186,12 +444,31 @@ export function StaffCalendar({
   const filteredAssignments = useMemo(
     () =>
       assignmentList.filter((assignment) => {
-        if (zoneFilter !== "all" && (assignment.shiftZoneName ?? "Toàn khu") !== zoneFilter) return false;
+        if (zoneFilter !== "all" && getZoneFilterValue(assignment.shiftZoneName) !== zoneFilter) return false;
         if (staffRoleFilter !== "all" && (assignment.assignmentRole ?? assignment.staffRole) !== staffRoleFilter) return false;
         return true;
       }),
     [assignmentList, staffRoleFilter, zoneFilter],
   );
+
+  const filteredZoneOptions = useMemo(() => {
+    const usedZoneNames = new Set<string>();
+
+    for (const booking of bookingList) {
+      usedZoneNames.add(getZoneFilterValue(booking.zoneName));
+    }
+
+    for (const assignment of assignmentList) {
+      usedZoneNames.add(getZoneFilterValue(assignment.shiftZoneName));
+    }
+
+    return [
+      ...zoneList.filter((zone) => usedZoneNames.has(zone.name)),
+      ...zoneList.filter((zone) => !usedZoneNames.has(zone.name)),
+    ];
+  }, [assignmentList, bookingList, zoneList]);
+
+  const hasActiveFilters = zoneFilter !== "all" || bookingStatusFilter !== "all" || staffRoleFilter !== "all";
 
   const events = useMemo<EventInput[]>(() => {
     const bookingEvents = filteredBookings.map((booking) => ({
@@ -284,15 +561,88 @@ export function StaffCalendar({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [draftAssignment]);
 
+  function resetCalendarFilters() {
+    setZoneFilter("all");
+    setBookingStatusFilter("all");
+    setStaffRoleFilter("all");
+    setSelectedItem(null);
+    setDraftAssignment(null);
+    setErrorMessage(null);
+  }
+
+  function clearFilterDependentState() {
+    setSelectedItem(null);
+    setDraftAssignment(null);
+    setErrorMessage(null);
+  }
+
+  function handleZoneFilterChange(nextValue: string) {
+    clearFilterDependentState();
+    setZoneFilter(nextValue);
+  }
+
+  function handleBookingStatusFilterChange(nextValue: string) {
+    clearFilterDependentState();
+    setBookingStatusFilter(nextValue);
+  }
+
+  function handleStaffRoleFilterChange(nextValue: string) {
+    clearFilterDependentState();
+    setStaffRoleFilter(nextValue);
+  }
+
+  function getFilterSummary() {
+    const summaryParts: string[] = [];
+
+    if (zoneFilter !== "all") summaryParts.push(`Khu: ${zoneFilter}`);
+    if (bookingStatusFilter !== "all") summaryParts.push(`Booking: ${getBookingStatusLabel(bookingStatusFilter)}`);
+    if (staffRoleFilter !== "all") summaryParts.push(`Nhân sự: ${getRoleLabel(staffRoleFilter)}`);
+
+    return summaryParts.join(" · ");
+  }
+
+  const filterSummary = getFilterSummary();
+
+  const visibleSelectedItem = selectedItem?.type === "booking"
+    ? filteredBookings.find((booking) => booking.id === selectedItem.item.id)
+    : selectedItem?.type === "assignment"
+      ? filteredAssignments.find((assignment) => assignment.id === selectedItem.item.id)
+      : null;
+
+  const selectedBookingItem: BookingItem | null = selectedItem?.type === "booking"
+    ? filteredBookings.find((booking) => booking.id === selectedItem.item.id) ?? null
+    : null;
+  const selectedAssignmentItem: AssignmentItem | null = selectedItem?.type === "assignment"
+    ? filteredAssignments.find((assignment) => assignment.id === selectedItem.item.id) ?? null
+    : null;
+
+  const visibleEventCount = filteredBookings.length + filteredAssignments.length;
+
+  const filteredRecommendations = staffingRecommendations.filter((item) => zoneFilter === "all" || getZoneFilterValue(item.zoneName) === zoneFilter);
+
+  const topRecommendation = filteredRecommendations.find((item) => item.isShort) ?? filteredRecommendations[0] ?? null;
+
+  const visibleConflicts = assignmentConflicts.filter((conflict) => filteredAssignments.some((assignment) => assignment.id === conflict.assignmentId));
+
+  const visibleShiftList = shiftList.filter((shift) => zoneFilter === "all" || getZoneFilterValue(shift.zoneName) === zoneFilter);
+
+  const shiftListForForms = visibleShiftList.length > 0 ? visibleShiftList : shiftList;
+
+  const zoneListForQuickFilter = filteredZoneOptions;
+
+  const zoneListForSelect = [...filteredZoneOptions];
+
+  if (!zoneListForSelect.some((zone) => zone.name === "Toàn khu")) {
+    zoneListForSelect.push({ id: -1, slug: "all-zones", name: "Toàn khu" });
+  }
+
+  const selectedQuickStaff = quickCreateStaffList.find((staff) => String(staff.id) === quickAssignmentStaffId) ?? null;
+
   useEffect(() => () => {
     if (highlightTimeoutRef.current) {
       clearTimeout(highlightTimeoutRef.current);
     }
   }, []);
-
-  const topRecommendation = staffingRecommendations.find((item) => item.isShort) ?? staffingRecommendations[0] ?? null;
-
-  const selectedQuickStaff = quickCreateStaffList.find((staff) => String(staff.id) === quickAssignmentStaffId) ?? null;
 
   useEffect(() => {
     if (!selectedQuickStaff) {
@@ -359,6 +709,36 @@ export function StaffCalendar({
     ? `Auto-focus sau khi tạo chỉ chạy nếu assignment mới vẫn nằm trong khu ${selectedQuickZone.name} mà bạn đang xem.`
     : "Auto-focus sau khi tạo sẽ chạy bình thường trên lịch hiện tại.";
 
+  function captureCalendarViewport() {
+    const calendarApi = calendarRef.current?.getApi() ?? calendarApiRef.current;
+    if (!calendarApi) return;
+
+    const nextViewportState = {
+      currentDate: calendarApi.getDate(),
+      currentView: calendarApi.view.type,
+    };
+
+    calendarApiRef.current = calendarApi;
+    calendarViewportStateRef.current = nextViewportState;
+    setCalendarViewportState(nextViewportState);
+  }
+
+  function toggleExpandedCalendar() {
+    captureCalendarViewport();
+    setIsExpanded((current) => !current);
+  }
+
+  function handleExpandedModalClose() {
+    if (draftAssignment) {
+      setDraftAssignment(null);
+      setErrorMessage(null);
+      return;
+    }
+
+    if (!isExpanded) return;
+    toggleExpandedCalendar();
+  }
+
   function handleEventClick(info: EventClickArg) {
     const entityType = info.event.extendedProps.entityType as "booking" | "assignment";
     const item = info.event.extendedProps.item as BookingItem | AssignmentItem;
@@ -375,6 +755,34 @@ export function StaffCalendar({
       endTime: info.end.toTimeString().slice(0, 5),
     });
   }
+
+  function renderCalendarSurface() {
+    return (
+      <StaffCalendarSurface
+        key={surfaceKey}
+        calendarRef={calendarRef}
+        isPending={isPending}
+        events={events}
+        onDateSelect={handleDateSelect}
+        onEventClick={handleEventClick}
+        onEventDrop={handleEventDrop}
+        onEventResize={handleEventResize}
+        onToggleExpand={toggleExpandedCalendar}
+        expandLabel={expandButtonLabel}
+        showExpandControl={!isExpanded}
+        initialView={calendarViewportState.currentView}
+        initialDate={calendarViewportState.currentDate}
+        isExpanded={isExpanded}
+      />
+    );
+  }
+
+  const topBar = (
+    <div className="mb-4">
+      <SectionHeading title="Lịch điều phối" description="Booking và phân ca nhân viên dùng chung một mặt lịch để điều phối theo ngày, tuần và giờ cao điểm." />
+      <p className="mt-2 overflow-hidden text-sm whitespace-nowrap text-[var(--muted)] text-ellipsis">{calendarSummary}</p>
+    </div>
+  );
 
   async function submitCalendarMove(entityType: "booking" | "assignment", item: BookingItem | AssignmentItem, nextStart: Date, nextEnd?: Date) {
     setErrorMessage(null);
@@ -481,32 +889,34 @@ export function StaffCalendar({
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_360px]">
       <Card>
         <CardContent>
-          <SectionHeading title="Lịch điều phối" description="Booking và phân ca nhân viên dùng chung một mặt lịch để điều phối theo ngày, tuần và giờ cao điểm." />
+          {topBar}
           <div className="mb-4 grid gap-3 md:grid-cols-4">
             <div>
               <FieldLabel>Khu vực</FieldLabel>
-              <Select value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value)}>
+              <Select value={zoneFilter} onChange={(event) => handleZoneFilterChange(event.target.value)}>
                 <option value="all">Tất cả khu vực</option>
-                {zoneList.map((zone) => (
+                {zoneListForSelect.map((zone) => (
                   <option key={zone.id} value={zone.name}>
                     {zone.name}
                   </option>
                 ))}
-                <option value="Toàn khu">Toàn khu</option>
               </Select>
             </div>
             <div>
               <FieldLabel>Trạng thái booking</FieldLabel>
-              <Select value={bookingStatusFilter} onChange={(event) => setBookingStatusFilter(event.target.value)}>
+              <Select value={bookingStatusFilter} onChange={(event) => handleBookingStatusFilterChange(event.target.value)}>
                 <option value="all">Tất cả</option>
                 <option value="pending">Chờ xác nhận</option>
                 <option value="confirmed">Đã xác nhận</option>
                 <option value="seated">Đã check-in</option>
+                <option value="completed">Hoàn tất</option>
+                <option value="cancelled">Đã hủy</option>
+                <option value="no_show">Không đến</option>
               </Select>
             </div>
             <div>
               <FieldLabel>Vai trò nhân sự</FieldLabel>
-              <Select value={staffRoleFilter} onChange={(event) => setStaffRoleFilter(event.target.value)}>
+              <Select value={staffRoleFilter} onChange={(event) => handleStaffRoleFilterChange(event.target.value)}>
                 <option value="all">Tất cả vai trò</option>
                 <option value="manager">Quản lý</option>
                 <option value="service">Phục vụ</option>
@@ -516,12 +926,17 @@ export function StaffCalendar({
               </Select>
             </div>
             <div className="flex items-end">
-              <Button variant="secondary" className="w-full" onClick={() => setSelectedItem(null)}>
+              <Button variant="secondary" className="w-full" onClick={resetCalendarFilters}>
                 <Filter className="h-4 w-4" />
-                Làm mới panel
+                {hasActiveFilters ? "Xóa bộ lọc" : "Làm mới panel"}
               </Button>
             </div>
           </div>
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+            <span>{visibleEventCount} mục đang hiển thị</span>
+            {filterSummary ? <span>• {filterSummary}</span> : null}
+          </div>
+
           {usingFallback ? (
             <div className="mb-4 rounded-[18px] border border-[color:var(--line)] bg-[rgba(244,226,155,0.24)] px-4 py-3 text-sm text-[var(--forest-dark)]">
               Dữ liệu đang ở chế độ fallback, lịch vẫn xem được nhưng cần kiểm tra kết nối DB trước khi điều phối thực tế.
@@ -532,72 +947,17 @@ export function StaffCalendar({
               {errorMessage}
             </div>
           ) : null}
-          <div className="overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white/75 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-            <style>{`
-              .fc {
-                --fc-border-color: rgba(63,111,66,0.12);
-                --fc-page-bg-color: transparent;
-                --fc-neutral-bg-color: rgba(220,239,214,0.25);
-                --fc-today-bg-color: rgba(205,229,195,0.45);
-                --fc-button-bg-color: #3f6f42;
-                --fc-button-border-color: #3f6f42;
-                --fc-button-hover-bg-color: #26482b;
-                --fc-button-hover-border-color: #26482b;
-                --fc-button-active-bg-color: #26482b;
-                --fc-button-active-border-color: #26482b;
-                --fc-event-text-color: #f8fff5;
-              }
-              .fc .fc-toolbar-title {
-                font-family: var(--font-charm), sans-serif;
-                color: var(--forest-dark);
-                font-size: 1.8rem;
-                font-weight: 700;
-              }
-              .fc .fc-col-header-cell-cushion,
-              .fc .fc-daygrid-day-number,
-              .fc .fc-timegrid-slot-label-cushion,
-              .fc .fc-timegrid-axis-cushion {
-                color: var(--text);
-              }
-              .fc .fc-event {
-                border-radius: 14px;
-                box-shadow: 0 10px 22px rgba(45,82,44,0.12);
-                border: none;
-                padding: 2px 4px;
-              }
-              .fc .booking-event {
-                background: linear-gradient(135deg, #6e9565, #87ab7f);
-              }
-              .fc .assignment-event {
-                background: linear-gradient(135deg, #2f5d62, #4a8088);
-              }
-              .fc .assignment-event--highlighted {
-                box-shadow: 0 0 0 3px rgba(244,226,155,0.95), 0 14px 28px rgba(45,82,44,0.24);
-                transform: scale(1.02);
-              }
-            `}</style>
-            <FullCalendar
-              ref={calendarRef}
-              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-              initialView="timeGridWeek"
-              headerToolbar={{
-                left: "prev,next today",
-                center: "title",
-                right: "dayGridMonth,timeGridWeek,timeGridDay",
-              }}
-              editable={!isPending}
-              selectable
-              eventDurationEditable
-              height="auto"
-              events={events}
-              select={handleDateSelect}
-              eventClick={handleEventClick}
-              eventDrop={handleEventDrop}
-              eventResize={handleEventResize}
-            />
-          </div>
+          <div className={calendarContainerClassName}>{isExpanded ? null : renderCalendarSurface()}</div>
         </CardContent>
       </Card>
+      <Modal
+        isOpen={isExpanded}
+        onClose={handleExpandedModalClose}
+        title="Lịch điều phối mở rộng"
+        className="max-w-[min(96vw,1600px)] h-[92vh]"
+      >
+        <div>{isExpanded ? renderCalendarSurface() : null}</div>
+      </Modal>
 
       <Card className="h-fit xl:sticky xl:top-6">
         <CardContent>
@@ -606,7 +966,7 @@ export function StaffCalendar({
             <div className="rounded-[18px] bg-white/60 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-[var(--forest-dark)]">
-                  {topRecommendation ? `${topRecommendation.zoneName} · ${topRecommendation.shiftDate}` : "Chưa có khuyến nghị"}
+                  {topRecommendation ? `${topRecommendation.zoneName} · ${topRecommendation.shiftDate}` : hasActiveFilters ? "Không có khuyến nghị khớp bộ lọc" : "Chưa có khuyến nghị"}
                 </div>
                 {topRecommendation ? (
                   <Badge tone={topRecommendation.isShort ? "warning" : "success"}>
@@ -621,15 +981,15 @@ export function StaffCalendar({
               </p>
             </div>
 
-            {assignmentConflicts.length > 0 ? (
+            {visibleConflicts.length > 0 ? (
               <div className="rounded-[18px] border border-[rgba(181,74,54,0.16)] bg-[rgba(181,74,54,0.08)] p-4 text-[#8c3b27]">
                 <div className="flex items-center gap-2 font-semibold">
                   <AlertTriangle className="h-4 w-4" />
                   Xung đột phân ca
                 </div>
                 <div className="mt-2 space-y-2">
-                  {assignmentConflicts.slice(0, 3).map((conflict) => {
-                    const assignment = assignmentList.find((item) => item.id === conflict.assignmentId);
+                  {visibleConflicts.slice(0, 3).map((conflict) => {
+                    const assignment = filteredAssignments.find((item) => item.id === conflict.assignmentId);
                     return (
                       <div key={conflict.assignmentId}>
                         {(assignment?.staffFullName ?? `Nhân viên #${conflict.staffMemberId}`)} · trùng với assignment {conflict.overlapsWith.join(", ")}
@@ -640,33 +1000,39 @@ export function StaffCalendar({
               </div>
             ) : null}
 
-            {selectedItem?.type === "booking" ? (
-              <div className="rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-[var(--forest-dark)]">{selectedItem.item.customerName}</div>
-                  <Badge tone={getStatusTone(selectedItem.item.status)}>{selectedItem.item.status}</Badge>
-                </div>
-                <div className="mt-2 space-y-1 text-[var(--muted)]">
-                  <div>{selectedItem.item.bookingDate} · {selectedItem.item.bookingTime}</div>
-                  <div>{selectedItem.item.zoneName ?? "Chưa gán khu"} / {selectedItem.item.tableCode ?? "Chưa gán bàn"}</div>
-                  <div>{selectedItem.item.guestCount} khách · {selectedItem.item.customerPhone}</div>
-                </div>
-                {selectedItem.item.note ? <p className="mt-3 leading-6 text-[var(--muted)]">{selectedItem.item.note}</p> : null}
+            {selectedItem && !visibleSelectedItem ? (
+              <div className="rounded-[18px] border border-dashed border-[color:var(--line)] bg-white/40 p-4 text-[var(--muted)]">
+                Phần tử đang chọn không còn khớp bộ lọc hiện tại. Đổi bộ lọc hoặc chọn mục khác trên lịch.
               </div>
             ) : null}
 
-            {selectedItem?.type === "assignment" ? (
+            {selectedBookingItem ? (
               <div className="rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-[var(--forest-dark)]">{selectedItem.item.staffFullName}</div>
-                  <Badge tone={getStatusTone(selectedItem.item.status)}>{selectedItem.item.status}</Badge>
+                  <div className="font-semibold text-[var(--forest-dark)]">{selectedBookingItem.customerName}</div>
+                  <Badge tone={getStatusTone(selectedBookingItem.status)}>{selectedBookingItem.status}</Badge>
                 </div>
                 <div className="mt-2 space-y-1 text-[var(--muted)]">
-                  <div>{selectedItem.item.shiftDate} · {selectedItem.item.startTime}–{selectedItem.item.endTime}</div>
-                  <div>{selectedItem.item.shiftLabel} · {selectedItem.item.shiftZoneName ?? "Toàn khu"}</div>
-                  <div>{selectedItem.item.assignmentRole ?? selectedItem.item.staffRole} · {selectedItem.item.staffPhone}</div>
+                  <div>{selectedBookingItem.bookingDate} · {selectedBookingItem.bookingTime}</div>
+                  <div>{selectedBookingItem.zoneName ?? "Chưa gán khu"} / {selectedBookingItem.tableCode ?? "Chưa gán bàn"}</div>
+                  <div>{selectedBookingItem.guestCount} khách · {selectedBookingItem.customerPhone}</div>
                 </div>
-                {selectedItem.item.notes ? <p className="mt-3 leading-6 text-[var(--muted)]">{selectedItem.item.notes}</p> : null}
+                {selectedBookingItem.note ? <p className="mt-3 leading-6 text-[var(--muted)]">{selectedBookingItem.note}</p> : null}
+              </div>
+            ) : null}
+
+            {selectedAssignmentItem ? (
+              <div className="rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold text-[var(--forest-dark)]">{selectedAssignmentItem.staffFullName}</div>
+                  <Badge tone={getStatusTone(selectedAssignmentItem.status)}>{selectedAssignmentItem.status}</Badge>
+                </div>
+                <div className="mt-2 space-y-1 text-[var(--muted)]">
+                  <div>{selectedAssignmentItem.shiftDate} · {selectedAssignmentItem.startTime}–{selectedAssignmentItem.endTime}</div>
+                  <div>{selectedAssignmentItem.shiftLabel} · {selectedAssignmentItem.shiftZoneName ?? "Toàn khu"}</div>
+                  <div>{selectedAssignmentItem.assignmentRole ?? selectedAssignmentItem.staffRole} · {selectedAssignmentItem.staffPhone}</div>
+                </div>
+                {selectedAssignmentItem.notes ? <p className="mt-3 leading-6 text-[var(--muted)]">{selectedAssignmentItem.notes}</p> : null}
 
                 <form
                   action={async (formData) => {
@@ -680,11 +1046,11 @@ export function StaffCalendar({
                   }}
                   className="mt-4 space-y-3 rounded-[18px] border border-[color:var(--line)] bg-[rgba(248,255,245,0.76)] p-4"
                 >
-                  <input type="hidden" name="id" value={selectedItem.item.id} />
+                  <input type="hidden" name="id" value={selectedAssignmentItem.id} />
                   <div>
                     <FieldLabel>Chuyển sang ca</FieldLabel>
-                    <Select name="staffShiftId" defaultValue={String(selectedItem.item.staffShiftId)}>
-                      {shiftList.map((shift) => (
+                    <Select name="staffShiftId" defaultValue={String(selectedAssignmentItem.staffShiftId)}>
+                      {shiftListForForms.map((shift) => (
                         <option key={shift.id} value={shift.id}>
                           {shift.shiftDate} · {shift.label} · {shift.startTime}-{shift.endTime}
                         </option>
@@ -693,7 +1059,7 @@ export function StaffCalendar({
                   </div>
                   <div>
                     <FieldLabel>Trạng thái assignment</FieldLabel>
-                    <Select name="status" defaultValue={selectedItem.item.status}>
+                    <Select name="status" defaultValue={selectedAssignmentItem.status}>
                       <option value="assigned">Assigned</option>
                       <option value="confirmed">Confirmed</option>
                       <option value="absent">Absent</option>
@@ -722,7 +1088,7 @@ export function StaffCalendar({
               </div>
             ) : null}
 
-            {!selectedItem ? (
+            {!visibleSelectedItem ? (
               <div className="space-y-4">
                 <div className="rounded-[18px] border border-dashed border-[color:var(--line)] bg-white/40 p-4 text-[var(--muted)]">
                   Chọn booking hoặc assignment để xem chi tiết, hoặc kéo chọn ô trống trên lịch để tự điền sẵn ngày giờ tạo assignment mới.
@@ -766,7 +1132,7 @@ export function StaffCalendar({
                           setQuickAssignmentRoleTouched(false);
                         }}>
                           <option value="all">Tất cả khu</option>
-                          {zoneList.map((zone) => (
+                          {zoneListForQuickFilter.map((zone) => (
                             <option key={zone.id} value={zone.name}>
                               {zone.name}
                             </option>
@@ -901,7 +1267,7 @@ export function StaffCalendar({
                 Tổng quan ca làm
               </div>
               <div className="mt-3 space-y-2 text-[var(--muted)]">
-                {shiftList.slice(0, 4).map((shift) => {
+                {shiftListForForms.slice(0, 4).map((shift) => {
                   const assignedCount = assignmentList.filter((assignment) => assignment.staffShiftId === shift.id && assignment.status !== "absent").length;
                   return (
                     <div key={shift.id} className="flex items-center justify-between gap-3">

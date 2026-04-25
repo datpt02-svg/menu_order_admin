@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit, Save, Trash2, Plus, ImagePlus, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { deleteServiceAction, saveServiceAction } from "@/app/(admin)/actions";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldError, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import type { ZoneRow } from "@/lib/server/serializers";
 
 export type ServiceItem = {
   id: number;
@@ -34,6 +35,13 @@ type ActionValidationResult = {
   fieldErrors?: Record<string, string>;
   formError?: string;
 };
+
+type ZoneItem = Pick<ZoneRow, "id" | "slug" | "name">;
+
+function getZoneLabel(zoneSlug: string | null, zoneNameBySlug: Map<string, string>) {
+  if (!zoneSlug) return "Không gán khu";
+  return zoneNameBySlug.get(zoneSlug) ?? "Không gán khu";
+}
 
 function moveItem(items: ServiceItem[], fromIndex: number, toIndex: number) {
   if (fromIndex === toIndex) return items;
@@ -71,7 +79,7 @@ function formatPriceLabel(value: string) {
   return value;
 }
 
-export function ServicesContent({ services }: { services: ServiceItem[] }) {
+export function ServicesContent({ services, zones }: { services: ServiceItem[]; zones: ZoneItem[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
@@ -89,6 +97,7 @@ export function ServicesContent({ services }: { services: ServiceItem[] }) {
   const [reorderError, setReorderError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const formErrorRef = useRef<HTMLDivElement | null>(null);
+  const zoneNameBySlug = useMemo(() => new Map(zones.map((zone) => [zone.slug, zone.name])), [zones]);
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -379,7 +388,7 @@ export function ServicesContent({ services }: { services: ServiceItem[] }) {
                     </div>
                   </div>
                   <div className="mt-1 text-xs font-medium uppercase tracking-wider text-[var(--muted)]">{item.category}</div>
-                  {item.zoneSlug && <div className="mt-1 text-[11px] text-[var(--muted)]">Zone: {item.zoneSlug}</div>}
+                  <div className="mt-1 text-[11px] text-[var(--muted)]">Khu vực: {getZoneLabel(item.zoneSlug, zoneNameBySlug)}</div>
 
                   <div className="mt-3 text-lg font-bold text-[var(--forest)]">{formatPriceLabel(item.priceLabel)}</div>
                   <div className="mt-2 line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">
@@ -478,8 +487,13 @@ export function ServicesContent({ services }: { services: ServiceItem[] }) {
             </div>
 
             <div>
-              <FieldLabel>Zone slug cho booking</FieldLabel>
-              <Input name="zoneSlug" defaultValue={selectedItem?.zoneSlug || ""} placeholder="Ví dụ: cafe-garden hoặc bbq-deck-a" invalid={hasError("zoneSlug")} onChange={setFieldValueError("zoneSlug")} />
+              <FieldLabel>Khu vực áp dụng cho booking</FieldLabel>
+              <Select name="zoneSlug" defaultValue={selectedItem?.zoneSlug || "all"} invalid={hasError("zoneSlug")} onChange={setFieldValueError("zoneSlug")}>
+                <option value="all">Không gán khu</option>
+                {zones.map((zone) => (
+                  <option key={zone.id} value={zone.slug}>{zone.name}</option>
+                ))}
+              </Select>
               <FieldError>{fieldErrors.zoneSlug}</FieldError>
             </div>
 

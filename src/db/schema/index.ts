@@ -110,6 +110,16 @@ export const services = pgTable("services", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const bookingConfigs = pgTable("booking_configs", {
+  id: serial("id").primaryKey(),
+  depositAmount: integer("deposit_amount").notNull(),
+  bankName: varchar("bank_name", { length: 120 }).notNull(),
+  bankCode: varchar("bank_code", { length: 40 }).notNull().default("mbbank"),
+  accountNumber: varchar("account_number", { length: 50 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const staffMembers = pgTable("staff_members", {
   id: serial("id").primaryKey(),
   code: varchar("code", { length: 40 }).notNull().unique(),

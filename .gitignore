@@ -45,3 +45,5 @@ next-env.d.ts
 undefined
 AGENTS.md
 CLAUDE.md
+.playwright-mcp
+public

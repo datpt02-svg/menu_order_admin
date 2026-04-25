@@ -95,11 +95,41 @@ export const waiterRequests = [
 ] as const;
 
 export const tableStatus = [
-  { id: "A-01", zone: "BBQ Deck A", status: "available", seats: 4 },
-  { id: "A-03", zone: "BBQ Deck A", status: "occupied", seats: 4 },
-  { id: "B-02", zone: "BBQ Deck B", status: "reserved", seats: 6 },
-  { id: "C-08", zone: "Cafe Garden", status: "occupied", seats: 2 },
-  { id: "C-12", zone: "Cafe Garden", status: "cleaning", seats: 4 },
+  {
+    id: "A-01",
+    zone: "BBQ Deck A",
+    status: "available",
+    seats: 4,
+    layout: { x: 24, y: 24, width: 116, height: 74, shape: "round" },
+  },
+  {
+    id: "A-03",
+    zone: "BBQ Deck A",
+    status: "occupied",
+    seats: 4,
+    layout: { x: 182, y: 118, width: 116, height: 74, shape: "round" },
+  },
+  {
+    id: "B-02",
+    zone: "BBQ Deck B",
+    status: "reserved",
+    seats: 6,
+    layout: { x: 92, y: 42, width: 132, height: 82, shape: "rect" },
+  },
+  {
+    id: "C-08",
+    zone: "Cafe Garden",
+    status: "occupied",
+    seats: 2,
+    layout: { x: 34, y: 28, width: 104, height: 68, shape: "round" },
+  },
+  {
+    id: "C-12",
+    zone: "Cafe Garden",
+    status: "cleaning",
+    seats: 4,
+    layout: { x: 190, y: 136, width: 120, height: 72, shape: "rect" },
+  },
 ] as const;
 
 export const serviceItems = [

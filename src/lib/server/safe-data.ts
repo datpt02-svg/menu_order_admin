@@ -5,6 +5,7 @@ import {
   getFallbackZones,
 } from "@/lib/server/fallback-data";
 import {
+  getBookingConfig,
   getBookings,
   getBookingServices,
   getDashboardSnapshot,
@@ -71,11 +72,36 @@ export async function safeServices() {
   }
 }
 
+const fallbackBookingConfig = {
+  depositAmount: 100000,
+  bankName: "MB Bank",
+  bankCode: "mbbank",
+  accountNumber: "09680881",
+};
+
 export async function safeBookingServices() {
   try {
     return { data: await getBookingServices(), usingFallback: false };
   } catch {
     return { data: getFallbackDashboardSnapshot().services, usingFallback: true };
+  }
+}
+
+export async function safeBookingConfig() {
+  try {
+    const data = await getBookingConfig();
+    if (!data) return { data: fallbackBookingConfig, usingFallback: true };
+    return {
+      data: {
+        depositAmount: data.depositAmount,
+        bankName: data.bankName,
+        bankCode: data.bankCode,
+        accountNumber: data.accountNumber,
+      },
+      usingFallback: false,
+    };
+  } catch {
+    return { data: fallbackBookingConfig, usingFallback: true };
   }
 }
 

@@ -1170,6 +1170,44 @@ button {
   text-align: right;
 }
 
+.deposit-qr {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid rgba(63, 111, 66, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.deposit-qr--empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.deposit-qr__label {
+  color: var(--mint-deep);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.deposit-qr__image {
+  width: min(100%, 240px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  padding: 10px;
+  border-radius: 16px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.deposit-qr__hint {
+  text-align: center;
+}
+
 .booking-receipt {
   display: inline-flex;
   align-items: center;

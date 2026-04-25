@@ -75,7 +75,7 @@ export function Modal({
           </button>
         </header>
 
-        <div className="admin-scrollbar overflow-y-auto p-8">
+        <div className="admin-scrollbar min-h-0 flex-1 overflow-y-auto p-8">
           {children}
         </div>
       </div>
