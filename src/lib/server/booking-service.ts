@@ -181,6 +181,25 @@ function isBookingBlockingNewCreate(booking: {
   return booking.status === "pending" && booking.depositReviewStatus === "submitted";
 }
 
+function isSuccessfulApprovedBooking(booking: {
+  depositReviewStatus: typeof bookings.$inferSelect.depositReviewStatus;
+}) {
+  return booking.depositReviewStatus === "approved";
+}
+
+async function findBookingByCode(code: string) {
+  const rows = await db
+    .select({
+      id: bookings.id,
+      depositReviewStatus: bookings.depositReviewStatus,
+    })
+    .from(bookings)
+    .where(eq(bookings.code, code))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
 async function findBlockingBookingByPhone(customerPhone: string, currentBookingId?: number) {
   const normalizedPhone = normalizePhone(customerPhone);
   if (!normalizedPhone) return null;
@@ -218,8 +237,10 @@ export async function saveBooking(input: SaveBookingInput) {
   let existingBookingId = cleaned.id ?? 0;
 
   if (!existingBookingId && cleaned.code) {
-    const existingRows = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.code, cleaned.code)).limit(1);
-    existingBookingId = existingRows[0]?.id ?? 0;
+    const existingBooking = await findBookingByCode(cleaned.code);
+    if (existingBooking && !isSuccessfulApprovedBooking(existingBooking)) {
+      existingBookingId = existingBooking.id;
+    }
   }
 
   if (!existingBookingId) {

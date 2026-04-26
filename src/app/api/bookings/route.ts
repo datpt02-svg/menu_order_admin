@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte, lt } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -94,6 +94,54 @@ async function findBookingByCode(code: string) {
     .limit(1);
 
   return booking ? serializeBooking(booking) : null;
+}
+
+async function findApprovedBookingsByPhone(customerPhone: string, limit: number, before?: string | null, from?: string | null, to?: string | null) {
+  const normalizedPhone = customerPhone.replace(/[().\s-]+/g, "").trim();
+  if (!normalizedPhone) return [];
+
+  const filters = [eq(bookings.depositReviewStatus, "approved")];
+
+  if (before) {
+    const beforeDate = new Date(before);
+    if (!Number.isNaN(beforeDate.getTime())) {
+      filters.push(lt(bookings.updatedAt, beforeDate));
+    }
+  }
+
+  if (from) {
+    filters.push(gte(bookings.bookingDate, from));
+  }
+
+  if (to) {
+    filters.push(lte(bookings.bookingDate, to));
+  }
+
+  const rows = await db
+    .select({
+      id: bookings.id,
+      code: bookings.code,
+      customerName: bookings.customerName,
+      customerPhone: bookings.customerPhone,
+      bookingDate: bookings.bookingDate,
+      bookingTime: bookings.bookingTime,
+      guestCount: bookings.guestCount,
+      status: bookings.status,
+      depositSlipPath: bookings.depositSlipPath,
+      depositReviewStatus: bookings.depositReviewStatus,
+      depositReviewedAt: bookings.depositReviewedAt,
+      depositReviewNote: bookings.depositReviewNote,
+      note: bookings.note,
+      updatedAt: bookings.updatedAt,
+    })
+    .from(bookings)
+    .where(and(...filters))
+    .orderBy(desc(bookings.depositReviewedAt), desc(bookings.updatedAt), desc(bookings.bookingDate), desc(bookings.bookingTime))
+    .limit(Math.max(1, Math.min(limit, 20)));
+
+  return rows
+    .filter((row) => row.customerPhone.replace(/[().\s-]+/g, "").trim() === normalizedPhone)
+    .map((row) => serializeBooking(row));
 }
 
 async function cancelBookingByCode(code: string) {
@@ -197,6 +245,40 @@ export function OPTIONS(request: Request) {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")?.trim();
+  const customerPhone = request.nextUrl.searchParams.get("customerPhone")?.trim();
+  const history = request.nextUrl.searchParams.get("history")?.trim();
+
+  if (history === "approved") {
+    const limit = Number(request.nextUrl.searchParams.get("limit") || 5);
+    const before = request.nextUrl.searchParams.get("before")?.trim() || null;
+    const from = request.nextUrl.searchParams.get("from")?.trim() || null;
+    const to = request.nextUrl.searchParams.get("to")?.trim() || null;
+
+    logBookingApi("GET:history:start", {
+      customerPhone: customerPhone || "",
+      limit,
+      before: before || "",
+      from: from || "",
+      to: to || "",
+    });
+
+    if (!customerPhone) {
+      logBookingApi("GET:history:missing-phone", {});
+      return withCors(request, NextResponse.json({ error: "Missing customer phone" }, { status: 400 }));
+    }
+
+    const bookings = await findApprovedBookingsByPhone(customerPhone, limit, before, from, to);
+    const nextCursor = bookings.length === Math.max(1, Math.min(limit, 20)) ? (bookings.at(-1)?.updatedAt ?? null) : null;
+
+    logBookingApi("GET:history:done", {
+      customerPhone,
+      count: bookings.length,
+      nextCursor: nextCursor || "",
+    });
+
+    return withCors(request, NextResponse.json({ bookings, nextCursor }, { status: 200 }));
+  }
+
   logBookingApi("GET:start", { code: code || "" });
   if (!code) {
     logBookingApi("GET:missing-code", {});

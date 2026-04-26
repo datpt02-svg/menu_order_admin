@@ -15,7 +15,7 @@
     callWaiter: "Gọi nhân viên",
     history: "Lịch sử",
     historySheetTitle: "Lịch đặt bàn",
-    historyEmpty: "Bạn chưa có lịch đặt bàn nào. Sau khi gửi booking, lịch gần nhất sẽ hiện tại đây.",
+    historyEmpty: "Bạn chưa có lịch đặt bàn thành công nào. Sau khi admin duyệt bill cọc, booking sẽ hiện tại đây.",
     historyHint: "Trạng thái sẽ tự cập nhật theo flow đặt bàn hiện tại trên thiết bị này.",
     uploadDepositReceipt: "Gửi bill cọc",
     uploadDepositReceiptTitle: "Tải ảnh bill cọc",
@@ -46,7 +46,7 @@
     callWaiter: "Call staff",
     history: "History",
     historySheetTitle: "Booking history",
-    historyEmpty: "You do not have any booking history yet. After sending a booking, the latest one will appear here.",
+    historyEmpty: "You do not have any successful booking history yet. Approved bookings will appear here after deposit review.",
     historyHint: "The status will update automatically based on the current booking flow on this device.",
     uploadDepositReceipt: "Upload deposit receipt",
     uploadDepositReceiptTitle: "Upload receipt image",
@@ -2179,6 +2179,13 @@ const state = {
     status: "draft",
     depositReviewNote: "",
   },
+  bookingHistory: [],
+  bookingHistorySearch: "",
+  bookingHistoryFrom: "",
+  bookingHistoryTo: "",
+  bookingHistoryVisibleCount: 5,
+  bookingHistoryNextCursor: "",
+  bookingHistoryLoading: false,
   waiterStep: "form",
   waiterError: "",
   waiterDraft: {
@@ -2571,6 +2578,7 @@ function clearNonBlockingLatestBooking() {
   const latestBooking = getLatestBooking();
   if (!latestBooking?.code) return;
   if (shouldResumeLatestBooking(latestBooking)) return;
+  if (latestBooking.depositReviewStatus === "approved" || latestBooking.status === "confirmed") return;
   localStorage.removeItem(BOOKING_STORAGE_KEY);
 }
 
@@ -3518,6 +3526,102 @@ function getLatestBooking() {
   }
 }
 
+function sanitizeBookingHistoryRecord(record) {
+  const sanitized = sanitizeLatestBookingRecord(record);
+  if (!sanitized) return null;
+  return {
+    ...sanitized,
+    id: Number(record?.id || 0) || 0,
+    guestCount: Number(record?.guestCount || sanitized.guestCount || 0) || 0,
+    depositReviewStatus: sanitizeBookingText(record?.depositReviewStatus, 40),
+    status: sanitizeBookingText(record?.status, 40),
+    updatedAt: sanitizeBookingText(record?.updatedAt, 80),
+    depositReviewedAt: sanitizeBookingText(record?.depositReviewedAt, 80),
+  };
+}
+
+function getHistorySearchValue() {
+  return sanitizeBookingText(state.bookingHistorySearch, 160).toLowerCase();
+}
+
+function getHistoryDateTimeText(booking) {
+  return `${booking.bookingDate || "--"} ${booking.bookingTime || ""}`.trim();
+}
+
+function matchesBookingHistorySearch(booking) {
+  const keyword = getHistorySearchValue();
+  if (!keyword) return true;
+  const haystack = [
+    booking.code,
+    booking.customerName,
+    booking.customerPhone,
+    booking.bookingDate,
+    booking.bookingTime,
+    getHistoryDateTimeText(booking),
+  ]
+    .map((value) => sanitizeBookingText(value, 160).toLowerCase())
+    .join(" ");
+  return haystack.includes(keyword);
+}
+
+function getFilteredBookingHistory() {
+  return state.bookingHistory.filter((booking) => matchesBookingHistorySearch(booking));
+}
+
+function getVisibleBookingHistory() {
+  return getFilteredBookingHistory().slice(0, state.bookingHistoryVisibleCount);
+}
+
+function canLoadMoreBookingHistory() {
+  return getFilteredBookingHistory().length > state.bookingHistoryVisibleCount || Boolean(state.bookingHistoryNextCursor);
+}
+
+function getHistoryFilterSummary(locale) {
+  const parts = [];
+  if (state.bookingHistoryFrom) parts.push(`${locale.fieldDate}: ${state.bookingHistoryFrom}`);
+  if (state.bookingHistoryTo) parts.push(`${locale.buttonDone || "Đến"}: ${state.bookingHistoryTo}`);
+  return parts.join(" • ");
+}
+
+async function fetchApprovedBookingHistory({ append = false } = {}) {
+  const latestBooking = getLatestBooking();
+  const customerPhone = sanitizeBookingText(latestBooking?.customerPhone, 40);
+  if (!customerPhone) {
+    state.bookingHistory = [];
+    state.bookingHistoryNextCursor = "";
+    return [];
+  }
+
+  const params = new URLSearchParams({
+    history: "approved",
+    customerPhone,
+    limit: "5",
+  });
+
+  if (append && state.bookingHistoryNextCursor) {
+    params.set("before", state.bookingHistoryNextCursor);
+  }
+  if (state.bookingHistoryFrom) {
+    params.set("from", state.bookingHistoryFrom);
+  }
+  if (state.bookingHistoryTo) {
+    params.set("to", state.bookingHistoryTo);
+  }
+
+  state.bookingHistoryLoading = true;
+  try {
+    const response = await fetch(`${buildApiUrl("/api/bookings")}?${params.toString()}`);
+    if (!response.ok) throw new Error("booking-history-fetch-failed");
+    const result = await response.json();
+    const rows = Array.isArray(result?.bookings) ? result.bookings.map((item) => sanitizeBookingHistoryRecord(item)).filter(Boolean) : [];
+    state.bookingHistory = append ? [...state.bookingHistory, ...rows.filter((row) => !state.bookingHistory.some((item) => item.id === row.id))] : rows;
+    state.bookingHistoryNextCursor = sanitizeBookingText(result?.nextCursor, 80);
+    return state.bookingHistory;
+  } finally {
+    state.bookingHistoryLoading = false;
+  }
+}
+
 async function submitWaiterDraft() {
   const location = state.waiterDraft.location.trim();
   const selectedItems = getSelectedGroceryItems();
@@ -3772,22 +3876,8 @@ function getLocalizedBookingServiceTitle(booking) {
   return service?.title || booking.serviceTitle || "";
 }
 
-function renderHistoryFlow() {
-  if (!historyFlow) return;
-  const booking = getLatestBooking();
-  const locale = locales[state.locale];
-  const copy = uiCopy[state.locale] || uiCopy.en;
-
-  if (!booking) {
-    historyFlow.innerHTML = `
-      <div class="history-empty">
-        ${locale.historyEmpty}
-      </div>
-    `;
-    return;
-  }
-
-  historyFlow.innerHTML = `
+function renderHistoryCard(booking, copy, locale) {
+  return `
     <div class="history-card">
       <div>
         <span class="booking-status-chip">${getHistoryBookingStatusLabel(booking)}</span>
@@ -3798,7 +3888,7 @@ function renderHistoryFlow() {
         <div class="history-card__row"><span>${copy.fieldBookingCode}</span><span>${booking.code}</span></div>
         <div class="history-card__row"><span>${copy.fieldCustomerName}</span><span>${booking.customerName}</span></div>
         <div class="history-card__row"><span>${copy.fieldPhone}</span><span>${booking.customerPhone}</span></div>
-        <div class="history-card__row"><span>${copy.fieldDateTime}</span><span>${booking.bookingDate || "--"} ${booking.bookingTime || ""}</span></div>
+        <div class="history-card__row"><span>${copy.fieldDateTime}</span><span>${getHistoryDateTimeText(booking)}</span></div>
         <div class="history-card__row"><span>${copy.fieldAdults}</span><span>${booking.guestCount}</span></div>
         <div class="history-card__row"><span>${copy.fieldDepositBill}</span><span>${getHistoryBookingReceiptName(booking)}</span></div>
         ${booking.note ? `<div class="history-card__row"><span>${copy.fieldNote}</span><span>${booking.note}</span></div>` : ""}
@@ -3808,9 +3898,64 @@ function renderHistoryFlow() {
         ${getHistoryCardActions(booking, locale)}
       </div>
     </div>
-    <div class="history-empty">
-      ${escapeHtml(getHistoryStatusDescription(booking) || locale.historyHint)}
+  `;
+}
+
+function renderHistoryFlow() {
+  if (!historyFlow) return;
+  const latestBooking = getLatestBooking();
+  const locale = locales[state.locale];
+  const copy = uiCopy[state.locale] || uiCopy.en;
+  const bookings = getVisibleBookingHistory();
+  const filterSummary = getHistoryFilterSummary(copy);
+  const hasHistoryPhone = Boolean(sanitizeBookingText(latestBooking?.customerPhone, 40));
+
+  if (!hasHistoryPhone) {
+    historyFlow.innerHTML = `
+      <div class="history-toolbar">
+        <label class="history-search">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <input id="history-search-input" type="search" value="${escapeHtml(state.bookingHistorySearch)}" placeholder="Tìm mã, ngày giờ, SĐT, tên khách" data-history-input="search" />
+        </label>
+        <div class="history-filter-grid">
+          <label class="history-filter-field">
+            <span>${copy.fieldDate}</span>
+            <input id="history-filter-from" type="date" value="${escapeHtml(state.bookingHistoryFrom)}" data-history-input="from" />
+          </label>
+          <label class="history-filter-field">
+            <span>Đến ngày</span>
+            <input id="history-filter-to" type="date" value="${escapeHtml(state.bookingHistoryTo)}" data-history-input="to" />
+          </label>
+        </div>
+      </div>
+      <div class="history-empty">${locale.historyEmpty}</div>
+    `;
+    return;
+  }
+
+  historyFlow.innerHTML = `
+    <div class="history-toolbar">
+      <label class="history-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input id="history-search-input" type="search" value="${escapeHtml(state.bookingHistorySearch)}" placeholder="Tìm mã, ngày giờ, SĐT, tên khách" data-history-input="search" />
+      </label>
+      <div class="history-filter-grid">
+        <label class="history-filter-field">
+          <span>${copy.fieldDate}</span>
+          <input id="history-filter-from" type="date" value="${escapeHtml(state.bookingHistoryFrom)}" data-history-input="from" />
+        </label>
+        <label class="history-filter-field">
+          <span>Đến ngày</span>
+          <input id="history-filter-to" type="date" value="${escapeHtml(state.bookingHistoryTo)}" data-history-input="to" />
+        </label>
+      </div>
+      ${filterSummary ? `<div class="history-filter-summary">${escapeHtml(filterSummary)}</div>` : ""}
     </div>
+    ${bookings.length
+      ? bookings.map((booking) => renderHistoryCard(booking, copy, locale)).join("")
+      : `<div class="history-empty">${escapeHtml(locale.historyEmpty)}</div>`}
+    ${state.bookingHistoryLoading ? `<div class="history-empty">Đang tải lịch đặt bàn...</div>` : ""}
+    ${canLoadMoreBookingHistory() ? `<button type="button" class="booking-button--ghost history-more" data-history-more="true">Xem thêm</button>` : ""}
   `;
 }
 
@@ -4255,6 +4400,7 @@ document.addEventListener("click", (event) => {
   const bookingCloseButton = target.closest("[data-booking-close]");
   const historyPaymentLink = target.closest("[data-history-payment]");
   const historyResubmitButton = target.closest("[data-history-resubmit]");
+  const historyMoreButton = target.closest("[data-history-more]");
   const bookingCancelButton = target.closest("[data-booking-cancel]");
   const historyCancelButton = target.closest("[data-history-cancel]");
   const waiterLocationButton = target.closest("[data-waiter-location]");
@@ -4404,6 +4550,20 @@ document.addEventListener("click", (event) => {
       });
   }
 
+  if (historyMoreButton instanceof HTMLElement) {
+    historyMoreButton.setAttribute("disabled", "disabled");
+    state.bookingHistoryVisibleCount += 5;
+    if (state.bookingHistoryVisibleCount > state.bookingHistory.length && state.bookingHistoryNextCursor) {
+      fetchApprovedBookingHistory({ append: true })
+        .finally(() => {
+          renderHistoryFlow();
+        });
+      return;
+    }
+    renderHistoryFlow();
+    return;
+  }
+
   if (bookingCancelButton instanceof HTMLElement || historyCancelButton instanceof HTMLElement) {
     const trigger = bookingCancelButton instanceof HTMLElement ? bookingCancelButton : historyCancelButton;
     trigger?.setAttribute("disabled", "disabled");
@@ -4514,12 +4674,18 @@ document.addEventListener("input", (event) => {
   if (!(target instanceof HTMLElement)) return;
   const field = target.dataset.bookingInput;
   const waiterField = target.dataset.waiterInput;
+  const historyField = target.dataset.historyInput;
   if (field) {
     handleBookingFieldChange(field, target.value);
   }
   if (waiterField) {
     state.waiterDraft[waiterField] = target.value;
     state.waiterError = "";
+  }
+  if (historyField === "search") {
+    state.bookingHistorySearch = target.value;
+    state.bookingHistoryVisibleCount = 5;
+    renderHistoryFlow();
   }
 });
 
@@ -4562,6 +4728,15 @@ document.addEventListener("change", (event) => {
         if (latestBooking) {
           setHistoryBookingError(latestBooking, getBookingReceiptUploadErrorMessage());
         }
+        renderHistoryFlow();
+      });
+    return;
+  }
+  if (target.dataset.historyInput === "from" || target.dataset.historyInput === "to") {
+    state[target.dataset.historyInput === "from" ? "bookingHistoryFrom" : "bookingHistoryTo"] = target.value;
+    state.bookingHistoryVisibleCount = 5;
+    fetchApprovedBookingHistory()
+      .finally(() => {
         renderHistoryFlow();
       });
     return;
@@ -4612,12 +4787,16 @@ bookingTrigger.addEventListener("click", () => {
 });
 
 historyTrigger.addEventListener("click", () => {
-  refreshLatestBookingStatusAndRender().finally(() => {
-    renderHistoryFlow();
-    historyModal.showModal();
-    startBookingStatusPolling();
-    attachBookingRealtime();
-  });
+  refreshLatestBookingStatusAndRender()
+    .finally(() => fetchApprovedBookingHistory())
+    .catch(() => [])
+    .finally(() => {
+      state.bookingHistoryVisibleCount = 5;
+      renderHistoryFlow();
+      historyModal.showModal();
+      startBookingStatusPolling();
+      attachBookingRealtime();
+    });
 });
 
 bookingModal?.addEventListener("close", () => {
