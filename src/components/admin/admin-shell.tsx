@@ -40,7 +40,7 @@ const navItems = [
   { href: "/waiter-requests", label: "Gọi nhân viên", icon: BellRing },
   { href: "/tables", label: "Bàn / Khu vực", icon: Map },
   { href: "/services", label: "Dịch vụ", icon: UtensilsCrossed },
-  { href: "/booking-settings", label: "Cấu hình chuyển khoản", icon: BellRing },
+  { href: "/settings", label: "Settings", icon: BellRing },
 ] as const;
 
 function buildBookingNotification(booking: {

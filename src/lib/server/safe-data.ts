@@ -74,9 +74,10 @@ export async function safeServices() {
 
 const fallbackBookingConfig = {
   depositAmount: 100000,
-  bankName: "MB Bank",
-  bankCode: "mbbank",
+  bankName: "MBBank",
+  bankCode: "MB",
   accountNumber: "09680881",
+  phone: "09680881",
 };
 
 export async function safeBookingServices() {
@@ -97,6 +98,7 @@ export async function safeBookingConfig() {
         bankName: data.bankName,
         bankCode: data.bankCode,
         accountNumber: data.accountNumber,
+        phone: data.phone,
       },
       usingFallback: false,
     };

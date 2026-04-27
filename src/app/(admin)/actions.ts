@@ -157,6 +157,7 @@ type BookingConfigValidationPayload = {
   bankName: string;
   bankCode: string;
   accountNumber: string;
+  phone: string;
   updatedAt: Date;
 };
 
@@ -492,21 +493,132 @@ async function validateBookingForm(formData: FormData): Promise<{ result: Valida
 }
 
 const BOOKING_CONFIG_BANK_OPTIONS = [
-  { code: "mbbank", name: "MB Bank" },
-  { code: "vietcombank", name: "Vietcombank" },
-  { code: "vietinbank", name: "VietinBank" },
-  { code: "bidv", name: "BIDV" },
-  { code: "agribank", name: "Agribank" },
-  { code: "acb", name: "ACB" },
-  { code: "tpbank", name: "TPBank" },
-  { code: "techcombank", name: "Techcombank" },
+  { code: "ICB", name: "VietinBank" },
+  { code: "VCB", name: "Vietcombank" },
+  { code: "BIDV", name: "BIDV" },
+  { code: "VBA", name: "Agribank" },
+  { code: "OCB", name: "OCB" },
+  { code: "MB", name: "MBBank" },
+  { code: "TCB", name: "Techcombank" },
+  { code: "ACB", name: "ACB" },
+  { code: "VPB", name: "VPBank" },
+  { code: "TPB", name: "TPBank" },
+  { code: "STB", name: "Sacombank" },
+  { code: "HDB", name: "HDBank" },
+  { code: "VCCB", name: "VietCapitalBank" },
+  { code: "SCB", name: "SCB" },
+  { code: "VIB", name: "VIB" },
+  { code: "SHB", name: "SHB" },
+  { code: "EIB", name: "Eximbank" },
+  { code: "MSB", name: "MSB" },
+  { code: "CAKE", name: "CAKE" },
+  { code: "Ubank", name: "Ubank" },
+  { code: "VTLMONEY", name: "ViettelMoney" },
+  { code: "TIMO", name: "Timo" },
+  { code: "VNPTMONEY", name: "VNPTMoney" },
+  { code: "SGICB", name: "SaigonBank" },
+  { code: "BAB", name: "BacABank" },
+  { code: "momo", name: "MoMo" },
+  { code: "PVDB", name: "PVcomBank Pay" },
+  { code: "PVCB", name: "PVcomBank" },
+  { code: "MBV", name: "MBV" },
+  { code: "NCB", name: "NCB" },
+  { code: "SHBVN", name: "ShinhanBank" },
+  { code: "ABB", name: "ABBANK" },
+  { code: "VAB", name: "VietABank" },
+  { code: "NAB", name: "NamABank" },
+  { code: "PGB", name: "PGBank" },
+  { code: "VIETBANK", name: "VietBank" },
+  { code: "BVB", name: "BaoVietBank" },
+  { code: "SEAB", name: "SeABank" },
+  { code: "COOPBANK", name: "COOPBANK" },
+  { code: "LPB", name: "LPBank" },
+  { code: "KLB", name: "KienLongBank" },
+  { code: "KBank", name: "KBank" },
+  { code: "MAFC", name: "MAFC" },
+  { code: "HLBVN", name: "HongLeong" },
+  { code: "KEBHANAHN", name: "KEBHANAHN" },
+  { code: "KEBHANAHCM", name: "KEBHanaHCM" },
+  { code: "CITIBANK", name: "Citibank" },
+  { code: "CBB", name: "CBBank" },
+  { code: "CIMB", name: "CIMB" },
+  { code: "DBS", name: "DBSBank" },
+  { code: "Vikki", name: "Vikki" },
+  { code: "VBSP", name: "VBSP" },
+  { code: "GPB", name: "GPBank" },
+  { code: "KBHCM", name: "KookminHCM" },
+  { code: "KBHN", name: "KookminHN" },
+  { code: "WVN", name: "Woori" },
+  { code: "VRB", name: "VRB" },
+  { code: "HSBC", name: "HSBC" },
+  { code: "IBK - HN", name: "IBKHN" },
+  { code: "IBK - HCM", name: "IBKHCM" },
+  { code: "IVB", name: "IndovinaBank" },
+  { code: "UOB", name: "UnitedOverseas" },
+  { code: "NHB HN", name: "Nonghyup" },
+  { code: "SCVN", name: "StandardChartered" },
+  { code: "PBVN", name: "PublicBank" },
 ] as const;
+
+const BOOKING_CONFIG_BANK_CODE_ALIASES: Record<string, string> = {
+  mbbank: "MB",
+  vietcombank: "VCB",
+  vietinbank: "ICB",
+  bidv: "BIDV",
+  agribank: "VBA",
+  acb: "ACB",
+  tpbank: "TPB",
+  techcombank: "TCB",
+  shb: "SHB",
+  ocb: "OCB",
+  sacombank: "STB",
+  hdbank: "HDB",
+  msb: "MSB",
+  vib: "VIB",
+  vpbank: "VPB",
+  eximbank: "EIB",
+  pvcombank: "PVCB",
+  pvcombankpay: "PVDB",
+  seabank: "SEAB",
+  vietcapitalbank: "VCCB",
+  vietabank: "VAB",
+  vietbank: "VIETBANK",
+  abbank: "ABB",
+  bacabank: "BAB",
+  baovietbank: "BVB",
+  pgbank: "PGB",
+  lpbank: "LPB",
+  kienlongbank: "KLB",
+  ncb: "NCB",
+  namabank: "NAB",
+  saigonbank: "SGICB",
+  publicbank: "PBVN",
+  standardchartered: "SCVN",
+  shinhanbank: "SHBVN",
+  hongleong: "HLBVN",
+  indovinabank: "IVB",
+  unitedoverseas: "UOB",
+  nonghyup: "NHB HN",
+  kookminhn: "KBHN",
+  kookminhcm: "KBHCM",
+  citibank: "CITIBANK",
+  cbbank: "CBB",
+  dbsbank: "DBS",
+  woori: "WVN",
+  gpbank: "GPB",
+};
+
+function normalizeBookingConfigBankCode(value: string) {
+  const text = value.trim();
+  return BOOKING_CONFIG_BANK_CODE_ALIASES[text.toLowerCase()] || text;
+}
 
 async function validateBookingConfigForm(formData: FormData): Promise<{ result: ValidationResult; payload?: BookingConfigValidationPayload }> {
   const depositAmountRaw = valueOf(formData, "depositAmount");
   const depositAmount = Number(depositAmountRaw);
-  const bankCode = valueOf(formData, "bankCode").toLowerCase();
+  const bankCode = normalizeBookingConfigBankCode(valueOf(formData, "bankCode"));
   const accountNumber = valueOf(formData, "accountNumber");
+  const phone = valueOf(formData, "phone");
   const fieldErrors: Record<string, string> = {};
   const selectedBank = BOOKING_CONFIG_BANK_OPTIONS.find((bank) => bank.code === bankCode);
 
@@ -521,9 +633,16 @@ async function validateBookingConfigForm(formData: FormData): Promise<{ result: 
   } else if (accountNumber.length > 50) {
     fieldErrors.accountNumber = "Số tài khoản không được vượt quá 50 ký tự.";
   }
+  if (!phone) {
+    fieldErrors.phone = "Số điện thoại là bắt buộc.";
+  } else if (!PHONE_ALLOWED_PATTERN.test(phone) || normalizePhone(phone).length < 9 || normalizePhone(phone).length > 15) {
+    fieldErrors.phone = "Số điện thoại không hợp lệ.";
+  } else if (phone.length > 40) {
+    fieldErrors.phone = "Số điện thoại không được vượt quá 40 ký tự.";
+  }
 
   if (Object.keys(fieldErrors).length || !selectedBank) {
-    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại cấu hình chuyển khoản.") };
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại cấu hình settings.") };
   }
 
   return {
@@ -533,6 +652,7 @@ async function validateBookingConfigForm(formData: FormData): Promise<{ result: 
       bankName: selectedBank.name,
       bankCode: selectedBank.code,
       accountNumber,
+      phone,
       updatedAt: new Date(),
     },
   };
@@ -710,9 +830,14 @@ async function ensureBookingConfigTable() {
       bank_name varchar(120) NOT NULL,
       bank_code varchar(40) NOT NULL DEFAULT 'mbbank',
       account_number varchar(50) NOT NULL,
+      phone varchar(40) NOT NULL DEFAULT '09680881',
       created_at timestamp NOT NULL DEFAULT now(),
       updated_at timestamp NOT NULL DEFAULT now()
     )
+  `);
+  await db.execute(sql`
+    ALTER TABLE booking_configs
+    ADD COLUMN IF NOT EXISTS phone varchar(40) NOT NULL DEFAULT '09680881'
   `);
 }
 
@@ -733,7 +858,7 @@ export async function saveBookingConfigAction(formData: FormData): Promise<Valid
     await db.insert(bookingConfigs).values(payload);
   }
 
-  revalidatePath("/booking-settings");
+  revalidatePath("/settings");
   return { ok: true };
 }
 
