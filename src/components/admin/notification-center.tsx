@@ -240,7 +240,7 @@ export function NotificationCenter({ notifications, initialReadIds }: { notifica
 
   return (
     <details ref={detailsRef} className="group relative w-full min-w-[280px] max-w-[380px] lg:w-auto">
-      <summary className="flex min-h-11 list-none items-center justify-between gap-3 rounded-[var(--radius-pill)] border border-[color:var(--line)] bg-white/80 px-4 text-sm font-semibold text-[var(--forest-dark)] shadow-[0_12px_24px_rgba(45,82,44,0.08)] transition hover:bg-white marker:hidden [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 list-none items-center justify-between gap-3 rounded-[var(--radius-pill)] border border-[color:var(--line)] bg-white/80 px-4 text-sm font-semibold text-[var(--forest-dark)] shadow-[0_12px_24px_rgba(45,82,44,0.08)] transition-all duration-200 hover:-translate-y-[1px] hover:bg-white hover:shadow-[0_16px_28px_rgba(45,82,44,0.12)] marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-3">
           <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(63,111,66,0.08)] text-[var(--forest)]">
             <Bell className={`h-4 w-4 origin-top ${unreadCount > 0 ? "notification-bell-ring" : ""}`} />
@@ -274,7 +274,7 @@ export function NotificationCenter({ notifications, initialReadIds }: { notifica
                   key={notification.id}
                   href={notification.href}
                   onClick={() => handleNotificationClick(notification.id)}
-                  className="block rounded-[20px] border border-[color:var(--line)] bg-white/80 p-4 transition hover:bg-[var(--panel)]"
+                  className="block rounded-[20px] border border-[color:var(--line)] bg-white/80 p-4 transition-all duration-200 hover:-translate-y-[1px] hover:bg-[var(--panel)] hover:shadow-[0_14px_24px_rgba(45,82,44,0.12)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">

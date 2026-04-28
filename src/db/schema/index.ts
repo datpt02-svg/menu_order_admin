@@ -110,6 +110,32 @@ export const services = pgTable("services", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const menuSections = pgTable("menu_sections", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  titleI18n: jsonb("title_i18n").$type<Record<string, string>>().notNull(),
+  descriptionI18n: jsonb("description_i18n").$type<Record<string, string>>().notNull(),
+  visible: boolean("visible").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const menuItems = pgTable("menu_items", {
+  id: serial("id").primaryKey(),
+  sectionId: integer("section_id").references(() => menuSections.id, { onDelete: "cascade" }).notNull(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  nameI18n: jsonb("name_i18n").$type<Record<string, string>>().notNull(),
+  noteI18n: jsonb("note_i18n").$type<Record<string, string>>().notNull(),
+  descriptionI18n: jsonb("description_i18n").$type<Record<string, string>>().notNull(),
+  priceLabel: varchar("price_label", { length: 120 }).notNull(),
+  imagePath: text("image_path"),
+  visible: boolean("visible").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const bookingConfigs = pgTable("booking_configs", {
   id: serial("id").primaryKey(),
   depositAmount: integer("deposit_amount").notNull(),

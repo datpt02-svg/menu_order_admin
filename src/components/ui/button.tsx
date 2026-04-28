@@ -4,15 +4,15 @@ import { cn } from "@/lib/utils";
 
 const buttonVariants = {
   primary:
-    "bg-[var(--forest)] text-[var(--white)] shadow-[0_12px_24px_rgba(45,82,44,0.16)] hover:bg-[var(--forest-dark)]",
+    "bg-[var(--forest)] text-[var(--white)] shadow-[0_12px_24px_rgba(45,82,44,0.16)] hover:bg-[var(--forest-dark)] hover:shadow-[0_16px_28px_rgba(45,82,44,0.2)]",
   secondary:
-    "bg-[var(--mint-strong)] text-[var(--forest-dark)] hover:bg-[#c3dfb8]",
+    "bg-[var(--mint-strong)] text-[var(--forest-dark)] hover:bg-[#c3dfb8] hover:shadow-[0_14px_24px_rgba(45,82,44,0.14)]",
   ghost:
-    "bg-transparent text-[var(--forest)] hover:bg-white/45",
+    "bg-transparent text-[var(--forest)] hover:bg-white/45 hover:shadow-[0_10px_18px_rgba(45,82,44,0.1)]",
   outline:
-    "border border-[color:var(--line)] bg-white/70 text-[var(--forest-dark)] hover:bg-[var(--panel)]",
+    "border border-[color:var(--line)] bg-white/70 text-[var(--forest-dark)] hover:bg-[var(--panel)] hover:shadow-[0_14px_24px_rgba(45,82,44,0.12)]",
   danger:
-    "bg-[#9f4b3e] text-white hover:bg-[#853c30]",
+    "bg-[#9f4b3e] text-white hover:bg-[#853c30] hover:shadow-[0_16px_28px_rgba(159,75,62,0.22)]",
 } as const;
 
 const sizeVariants = {
@@ -42,7 +42,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center rounded-[var(--radius-pill)] font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center rounded-[var(--radius-pill)] font-semibold transition-all duration-200 enabled:cursor-pointer enabled:hover:-translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(110,149,101,0.28)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-60",
         buttonVariants[variant],
         sizeVariants[size],
         className,

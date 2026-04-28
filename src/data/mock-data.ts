@@ -100,14 +100,14 @@ export const tableStatus = [
     zone: "BBQ Deck A",
     status: "available",
     seats: 4,
-    layout: { x: 24, y: 24, width: 116, height: 74, shape: "round" },
+    layout: { x: 24, y: 24, width: 132, height: 82, shape: "rect" },
   },
   {
     id: "A-03",
     zone: "BBQ Deck A",
     status: "occupied",
     seats: 4,
-    layout: { x: 182, y: 118, width: 116, height: 74, shape: "round" },
+    layout: { x: 182, y: 118, width: 132, height: 82, shape: "rect" },
   },
   {
     id: "B-02",
@@ -121,14 +121,14 @@ export const tableStatus = [
     zone: "Cafe Garden",
     status: "occupied",
     seats: 2,
-    layout: { x: 34, y: 28, width: 104, height: 68, shape: "round" },
+    layout: { x: 34, y: 28, width: 132, height: 82, shape: "rect" },
   },
   {
     id: "C-12",
     zone: "Cafe Garden",
     status: "cleaning",
     seats: 4,
-    layout: { x: 190, y: 136, width: 120, height: 72, shape: "rect" },
+    layout: { x: 190, y: 136, width: 132, height: 82, shape: "rect" },
   },
 ] as const;
 

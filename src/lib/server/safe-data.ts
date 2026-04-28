@@ -4,17 +4,20 @@ import {
   getFallbackStaffSnapshot,
   getFallbackZones,
 } from "@/lib/server/fallback-data";
+import { loadMenuCatalogSource } from "@/lib/server/menu-catalog-source";
 import {
   getBookingConfig,
   getBookings,
   getBookingServices,
   getDashboardSnapshot,
+  getMenuSections,
   getServices,
   getStaffAssignments,
   getStaffMembers,
   getStaffShifts,
   getStaffingCalendarSnapshot,
   getTables,
+  getVisibleMenuSectionsForUser,
   getWaiterRequests,
   getZones,
 } from "@/lib/server/queries";
@@ -115,6 +118,25 @@ export async function safeZones() {
   } catch {
     return { data: getFallbackZones(), usingFallback: true };
   }
+}
+
+export async function safeMenuSections() {
+  try {
+    return { data: await getMenuSections(), usingFallback: false };
+  } catch {
+    return { data: [], usingFallback: true };
+  }
+}
+
+export async function safeUserMenuSections() {
+  try {
+    const data = await getVisibleMenuSectionsForUser();
+    if (data.length > 0) return { data, usingFallback: false };
+  } catch {
+    // ignore and fall back to source file below
+  }
+
+  return { data: await loadMenuCatalogSource(), usingFallback: true };
 }
 
 export async function safeStaffMembers() {

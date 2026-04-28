@@ -1,9 +1,12 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/db/client";
+import { getPublicApiBaseUrl } from "@/lib/env";
 import {
   bookingConfigs,
   bookings,
+  menuItems,
+  menuSections,
   services,
   staffAssignments,
   staffMembers,
@@ -20,11 +23,15 @@ import {
 import type {
   BookingConfigRow,
   BookingRow,
+  MenuItemRow,
+  MenuSectionRow,
+  MenuSectionWithItemsRow,
   ServiceRow,
   StaffAssignmentRow,
   StaffMemberRow,
   StaffShiftRow,
   TableRow,
+  UserMenuSectionRow,
   WaiterRow,
   ZoneRow,
 } from "@/lib/server/serializers";
@@ -222,6 +229,55 @@ export async function getBookingServices(): Promise<ServiceRow[]> {
 export async function getBookingConfig(): Promise<BookingConfigRow | null> {
   const rows = await db.select().from(bookingConfigs).orderBy(asc(bookingConfigs.id)).limit(1);
   return rows[0] ?? null;
+}
+
+export async function getMenuSections(): Promise<MenuSectionWithItemsRow[]> {
+  const [sections, items] = await Promise.all([
+    db.select().from(menuSections).orderBy(asc(menuSections.sortOrder), asc(menuSections.slug), asc(menuSections.id)),
+    db.select().from(menuItems).orderBy(asc(menuItems.sectionId), asc(menuItems.sortOrder), asc(menuItems.slug), asc(menuItems.id)),
+  ]);
+
+  const itemsBySectionId = items.reduce<Map<number, MenuItemRow[]>>((map, item) => {
+    const list = map.get(item.sectionId) || [];
+    list.push(item);
+    map.set(item.sectionId, list);
+    return map;
+  }, new Map());
+
+  return sections.map((section) => ({
+    ...section,
+    items: itemsBySectionId.get(section.id) || [],
+  })) satisfies MenuSectionWithItemsRow[];
+}
+
+function buildPublicMenuImageUrl(imagePath: string | null) {
+  if (!imagePath) return "";
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  const publicApiBaseUrl = getPublicApiBaseUrl();
+  if (!publicApiBaseUrl || !imagePath.startsWith("/")) return imagePath;
+
+  return `${publicApiBaseUrl.replace(/\/$/, "")}${imagePath}`;
+}
+
+export async function getVisibleMenuSectionsForUser(): Promise<UserMenuSectionRow[]> {
+  const sections = await getMenuSections();
+  return sections
+    .filter((section) => section.visible)
+    .map((section) => ({
+      id: section.slug,
+      title: section.titleI18n,
+      description: section.descriptionI18n,
+      items: section.items
+        .filter((item) => item.visible)
+        .map((item) => ({
+          id: item.slug,
+          name: item.nameI18n,
+          note: item.noteI18n,
+          description: item.descriptionI18n,
+          price: item.priceLabel,
+          image: buildPublicMenuImageUrl(item.imagePath),
+        })),
+    }));
 }
 
 export async function getStaffMembers(): Promise<StaffMemberRow[]> {

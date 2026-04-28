@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
   bookingConfigs,
   bookingStatusHistory,
   bookings,
+  menuItems,
+  menuSections,
   services,
   staffAssignmentEvents,
   staffAssignments,
@@ -18,10 +20,21 @@ import {
   zones,
 } from "@/db/schema";
 import { saveBooking, saveWaiterRequest } from "@/lib/server/booking-service";
+import { ensureMenuCatalogTables } from "@/lib/server/menu-catalog-db";
+import { getMenuCatalogLocales, loadMenuCatalogSource } from "@/lib/server/menu-catalog-source";
+import { getMenuSections } from "@/lib/server/queries";
 
 function valueOf(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
+  const directValue = formData.get(key);
+  if (typeof directValue === "string") return directValue.trim();
+
+  for (const [entryKey, entryValue] of formData.entries()) {
+    if (entryKey === key || entryKey.endsWith(`_${key}`)) {
+      return typeof entryValue === "string" ? entryValue.trim() : "";
+    }
+  }
+
+  return "";
 }
 
 function optionalValue(formData: FormData, key: string) {
@@ -161,7 +174,43 @@ type BookingConfigValidationPayload = {
   updatedAt: Date;
 };
 
+type ZoneValidationPayload = {
+  name: string;
+  slug: string;
+};
+
+type TableValidationPayload = {
+  code: string;
+  zoneId: number | null;
+  seats: number;
+  status: typeof tables.$inferInsert.status;
+};
+
+type MenuSectionValidationPayload = {
+  slug: string;
+  titleI18n: Record<string, string>;
+  descriptionI18n: Record<string, string>;
+  visible: boolean;
+  sortOrder: number;
+  updatedAt: Date;
+};
+
+type MenuItemValidationPayload = {
+  sectionId: number;
+  slug: string;
+  nameI18n: Record<string, string>;
+  noteI18n: Record<string, string>;
+  descriptionI18n: Record<string, string>;
+  priceLabel: string;
+  imagePath: string | null;
+  visible: boolean;
+  sortOrder: number;
+  updatedAt: Date;
+};
+
 const SERVICE_ORDER_PARKED_VALUE = 0;
+const MENU_ORDER_PARKED_VALUE = 0;
+const MENU_CATALOG_PATHS = ["/menu", "/api/menu-catalog"] as const;
 
 function clampServicePosition(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -280,6 +329,17 @@ function normalizePhone(value: string) {
   return value.replace(/[().\s-]+/g, "").trim();
 }
 
+function slugifyMenuValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 function isValidDateString(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00`);
@@ -288,6 +348,174 @@ function isValidDateString(value: string) {
 
 function isValidTimeString(value: string) {
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+}
+
+function buildRequiredI18n(formData: FormData, prefix: string, maxLength: number, fallbackField: string) {
+  const locales = getMenuCatalogLocales();
+  const baseValue = trimOptionalString(valueOf(formData, fallbackField), maxLength) || "";
+  const normalized = Object.fromEntries(
+    locales.map((locale) => {
+      const value = trimOptionalString(valueOf(formData, `${prefix}_${locale}`), maxLength);
+      return [locale, locale === "vi" ? baseValue || value : value || ""];
+    }),
+  ) as Record<string, string>;
+
+  if (!normalized.vi) {
+    normalized.vi = baseValue;
+  }
+
+  return normalized;
+}
+
+function revalidateMenuCatalogPaths() {
+  for (const pathname of MENU_CATALOG_PATHS) {
+    revalidatePath(pathname);
+  }
+}
+
+async function getNextMenuSectionSortOrder() {
+  const rows = await db.select({ sortOrder: menuSections.sortOrder }).from(menuSections).orderBy(desc(menuSections.sortOrder)).limit(1);
+  return (rows[0]?.sortOrder || 0) + 1;
+}
+
+async function getNextMenuItemSortOrder(sectionId: number) {
+  const rows = await db.select({ sortOrder: menuItems.sortOrder }).from(menuItems).where(eq(menuItems.sectionId, sectionId)).orderBy(desc(menuItems.sortOrder)).limit(1);
+  return (rows[0]?.sortOrder || 0) + 1;
+}
+
+async function normalizeMenuSectionSortOrder(executor: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]) {
+  const rows = await executor
+    .select({ id: menuSections.id, sortOrder: menuSections.sortOrder })
+    .from(menuSections)
+    .orderBy(asc(menuSections.sortOrder), asc(menuSections.slug), asc(menuSections.id));
+
+  for (const [index, row] of rows.entries()) {
+    const nextSortOrder = index + 1;
+    if (row.sortOrder === nextSortOrder) continue;
+    await executor.update(menuSections).set({ sortOrder: nextSortOrder, updatedAt: new Date() }).where(eq(menuSections.id, row.id));
+  }
+
+  return rows.map((row, index) => ({ id: row.id, sortOrder: index + 1 }));
+}
+
+async function normalizeMenuItemSortOrder(executor: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0], sectionId: number) {
+  const rows = await executor
+    .select({ id: menuItems.id, sortOrder: menuItems.sortOrder })
+    .from(menuItems)
+    .where(eq(menuItems.sectionId, sectionId))
+    .orderBy(asc(menuItems.sortOrder), asc(menuItems.slug), asc(menuItems.id));
+
+  for (const [index, row] of rows.entries()) {
+    const nextSortOrder = index + 1;
+    if (row.sortOrder === nextSortOrder) continue;
+    await executor.update(menuItems).set({ sortOrder: nextSortOrder, updatedAt: new Date() }).where(eq(menuItems.id, row.id));
+  }
+
+  return rows.map((row, index) => ({ id: row.id, sortOrder: index + 1 }));
+}
+
+async function validateMenuSectionForm(formData: FormData): Promise<{ result: ValidationResult; payload?: MenuSectionValidationPayload; id: number }> {
+  const id = numberValue(formData, "id");
+  const titleI18n = buildRequiredI18n(formData, "titleI18n", 160, "titleVi");
+  const slug = (valueOf(formData, "slug") || slugifyMenuValue(titleI18n.vi)).toLowerCase();
+  const descriptionI18n = buildRequiredI18n(formData, "descriptionI18n", 2000, "descriptionVi");
+  const sortOrderValue = numberValue(formData, "sortOrder");
+  const sortOrder = sortOrderValue >= 1 ? sortOrderValue : (await getNextMenuSectionSortOrder());
+  const fieldErrors: Record<string, string> = {};
+
+  if (!titleI18n.vi || titleI18n.vi.length < 2) fieldErrors.titleVi = "Tên nhóm món phải có ít nhất 2 ký tự.";
+  if (!slug) {
+    fieldErrors.slug = "Slug là bắt buộc.";
+  } else if (!SLUG_PATTERN.test(slug)) {
+    fieldErrors.slug = "Slug chỉ được chứa chữ thường, số và dấu gạch ngang.";
+  }
+
+  if (!fieldErrors.slug) {
+    const duplicate = await db
+      .select({ id: menuSections.id })
+      .from(menuSections)
+      .where(id ? and(eq(menuSections.slug, slug), ne(menuSections.id, id)) : eq(menuSections.slug, slug))
+      .limit(1);
+    if (duplicate[0]) fieldErrors.slug = "Slug nhóm món đã tồn tại.";
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại thông tin nhóm món."), id };
+  }
+
+  return {
+    result: { ok: true },
+    id,
+    payload: {
+      slug,
+      titleI18n,
+      descriptionI18n,
+      visible: valueOf(formData, "visible") !== "hidden",
+      sortOrder,
+      updatedAt: new Date(),
+    },
+  };
+}
+
+async function validateMenuItemForm(formData: FormData): Promise<{ result: ValidationResult; payload?: MenuItemValidationPayload; id: number }> {
+  const id = numberValue(formData, "id");
+  const sectionId = numberValue(formData, "sectionId");
+  const nameI18n = buildRequiredI18n(formData, "nameI18n", 160, "nameVi");
+  const slug = (valueOf(formData, "slug") || slugifyMenuValue(nameI18n.vi)).toLowerCase();
+  const noteI18n = buildRequiredI18n(formData, "noteI18n", 160, "noteVi");
+  const descriptionI18n = buildRequiredI18n(formData, "descriptionI18n", 2000, "descriptionVi");
+  const priceLabel = valueOf(formData, "priceLabel");
+  const imagePath = trimOptionalString(valueOf(formData, "imagePath"), 500);
+  const sortOrderValue = numberValue(formData, "sortOrder");
+  const sortOrder = sortOrderValue >= 1 ? sortOrderValue : (sectionId ? await getNextMenuItemSortOrder(sectionId) : 1);
+  const fieldErrors: Record<string, string> = {};
+
+  if (!sectionId) fieldErrors.sectionId = "Vui lòng chọn nhóm món.";
+  if (!nameI18n.vi || nameI18n.vi.length < 2) fieldErrors.nameVi = "Tên món phải có ít nhất 2 ký tự.";
+  if (!priceLabel) fieldErrors.priceLabel = "Giá hiển thị là bắt buộc.";
+  if (!slug) {
+    fieldErrors.slug = "Slug là bắt buộc.";
+  } else if (!SLUG_PATTERN.test(slug)) {
+    fieldErrors.slug = "Slug chỉ được chứa chữ thường, số và dấu gạch ngang.";
+  }
+  if (imagePath && !IMAGE_PATH_PATTERN.test(imagePath)) {
+    fieldErrors.imagePath = "Ảnh phải là đường dẫn nội bộ bắt đầu bằng / hoặc URL http/https hợp lệ.";
+  }
+
+  if (!fieldErrors.sectionId) {
+    const sectionRows = await db.select({ id: menuSections.id }).from(menuSections).where(eq(menuSections.id, sectionId)).limit(1);
+    if (!sectionRows[0]) fieldErrors.sectionId = "Nhóm món không tồn tại.";
+  }
+
+  if (!fieldErrors.slug) {
+    const duplicate = await db
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(id ? and(eq(menuItems.slug, slug), ne(menuItems.id, id)) : eq(menuItems.slug, slug))
+      .limit(1);
+    if (duplicate[0]) fieldErrors.slug = "Slug món đã tồn tại.";
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại thông tin món."), id };
+  }
+
+  return {
+    result: { ok: true },
+    id,
+    payload: {
+      sectionId,
+      slug,
+      nameI18n,
+      noteI18n,
+      descriptionI18n,
+      priceLabel,
+      imagePath,
+      visible: valueOf(formData, "visible") !== "hidden",
+      sortOrder,
+      updatedAt: new Date(),
+    },
+  };
 }
 
 async function validateServiceForm(formData: FormData): Promise<{ result: ValidationResult; payload?: ServiceValidationPayload; id: number }> {
@@ -613,6 +841,115 @@ function normalizeBookingConfigBankCode(value: string) {
   return BOOKING_CONFIG_BANK_CODE_ALIASES[text.toLowerCase()] || text;
 }
 
+function slugifyZoneValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+async function validateZoneForm(formData: FormData): Promise<{ result: ValidationResult; payload?: ZoneValidationPayload; id: number }> {
+  const id = numberValue(formData, "id");
+  const name = valueOf(formData, "name");
+  const slug = (valueOf(formData, "slug") || slugifyZoneValue(name)).toLowerCase();
+  const fieldErrors: Record<string, string> = {};
+
+  if (name.length < 2) {
+    fieldErrors.name = "Tên khu vực phải có ít nhất 2 ký tự.";
+  }
+  if (!slug) {
+    fieldErrors.slug = "Slug khu vực là bắt buộc.";
+  } else if (!SLUG_PATTERN.test(slug)) {
+    fieldErrors.slug = "Slug chỉ được chứa chữ thường, số và dấu gạch ngang.";
+  }
+
+  if (!fieldErrors.slug) {
+    const duplicate = await db
+      .select({ id: zones.id })
+      .from(zones)
+      .where(id ? and(eq(zones.slug, slug), ne(zones.id, id)) : eq(zones.slug, slug))
+      .limit(1);
+    if (duplicate[0]) {
+      fieldErrors.slug = "Slug khu vực đã tồn tại.";
+    }
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại thông tin khu vực."), id };
+  }
+
+  return {
+    result: { ok: true },
+    id,
+    payload: { name, slug },
+  };
+}
+
+async function validateTableForm(formData: FormData): Promise<{ result: ValidationResult; payload?: TableValidationPayload; id: number }> {
+  const id = numberValue(formData, "id");
+  const code = valueOf(formData, "code").toUpperCase();
+  const seats = Number(valueOf(formData, "seats"));
+  const statusValue = valueOf(formData, "status") || "available";
+  const zoneIdValue = valueOf(formData, "zoneId");
+  const zoneId = zoneIdValue ? Number(zoneIdValue) : null;
+  const fieldErrors: Record<string, string> = {};
+
+  if (!code) {
+    fieldErrors.code = "Mã bàn là bắt buộc.";
+  } else if (code.length > 20) {
+    fieldErrors.code = "Mã bàn không được vượt quá 20 ký tự.";
+  }
+
+  if (!Number.isInteger(seats) || seats < 1) {
+    fieldErrors.seats = "Sức chứa phải là số nguyên lớn hơn hoặc bằng 1.";
+  }
+
+  if (!["available", "reserved", "occupied", "cleaning"].includes(statusValue)) {
+    fieldErrors.status = "Trạng thái bàn không hợp lệ.";
+  }
+
+  if (zoneIdValue && (!Number.isInteger(zoneId) || (zoneId as number) < 1)) {
+    fieldErrors.zoneId = "Khu vực không hợp lệ.";
+  }
+
+  if (!fieldErrors.zoneId && zoneId) {
+    const zoneRows = await db.select({ id: zones.id }).from(zones).where(eq(zones.id, zoneId)).limit(1);
+    if (!zoneRows[0]) {
+      fieldErrors.zoneId = "Khu vực không tồn tại.";
+    }
+  }
+
+  if (!fieldErrors.code) {
+    const duplicate = await db
+      .select({ id: tables.id })
+      .from(tables)
+      .where(id ? and(eq(tables.code, code), ne(tables.id, id)) : eq(tables.code, code))
+      .limit(1);
+    if (duplicate[0]) {
+      fieldErrors.code = "Mã bàn đã tồn tại.";
+    }
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại thông tin bàn."), id };
+  }
+
+  return {
+    result: { ok: true },
+    id,
+    payload: {
+      code,
+      zoneId,
+      seats,
+      status: statusValue as typeof tables.$inferInsert.status,
+    },
+  };
+}
+
 async function validateBookingConfigForm(formData: FormData): Promise<{ result: ValidationResult; payload?: BookingConfigValidationPayload }> {
   const depositAmountRaw = valueOf(formData, "depositAmount");
   const depositAmount = Number(depositAmountRaw);
@@ -871,6 +1208,271 @@ export async function deleteServiceAction(formData: FormData) {
   });
   revalidatePath("/dashboard");
   revalidatePath("/services");
+}
+
+function revalidateTablePages() {
+  revalidatePath("/dashboard");
+  revalidatePath("/tables");
+  revalidatePath("/bookings");
+  revalidatePath("/waiter-requests");
+}
+
+export async function saveZoneAction(formData: FormData): Promise<ValidationResult> {
+  const { result, payload, id } = await validateZoneForm(formData);
+  if (!result.ok || !payload) {
+    return result;
+  }
+
+  if (id) {
+    await db.update(zones).set(payload).where(eq(zones.id, id));
+  } else {
+    await db.insert(zones).values(payload);
+  }
+
+  revalidateTablePages();
+  return { ok: true };
+}
+
+export async function deleteZoneAction(formData: FormData): Promise<ValidationResult> {
+  const id = numberValue(formData, "id");
+  if (!id) return { ok: false, formError: "Không tìm thấy khu vực cần xóa." };
+
+  const [tableLinks, bookingLinks, waiterLinks] = await Promise.all([
+    db.select({ id: tables.id }).from(tables).where(eq(tables.zoneId, id)).limit(1),
+    db.select({ id: bookings.id }).from(bookings).where(eq(bookings.zoneId, id)).limit(1),
+    db.select({ id: waiterRequests.id }).from(waiterRequests).where(eq(waiterRequests.zoneId, id)).limit(1),
+  ]);
+
+  if (tableLinks[0] || bookingLinks[0] || waiterLinks[0]) {
+    return { ok: false, formError: "Khu vực vẫn đang liên kết với bàn, booking hoặc yêu cầu phục vụ. Hãy xử lý liên kết trước khi xóa." };
+  }
+
+  await db.delete(zones).where(eq(zones.id, id));
+  revalidateTablePages();
+  return { ok: true };
+}
+
+export async function saveTableAction(formData: FormData): Promise<ValidationResult> {
+  const { result, payload, id } = await validateTableForm(formData);
+  if (!result.ok || !payload) {
+    return result;
+  }
+
+  if (id) {
+    await db.update(tables).set(payload).where(eq(tables.id, id));
+  } else {
+    await db.insert(tables).values(payload);
+  }
+
+  revalidateTablePages();
+  return { ok: true };
+}
+
+export async function updateTableStatusAction(formData: FormData): Promise<ValidationResult> {
+  const id = numberValue(formData, "id");
+  const status = valueOf(formData, "status");
+
+  if (!id) return { ok: false, formError: "Không tìm thấy bàn cần cập nhật trạng thái." };
+  if (!["available", "reserved", "occupied", "cleaning"].includes(status)) {
+    return { ok: false, fieldErrors: { status: "Trạng thái bàn không hợp lệ." }, formError: "Không thể cập nhật trạng thái bàn." };
+  }
+
+  await db.update(tables).set({ status: status as typeof tables.$inferInsert.status }).where(eq(tables.id, id));
+  revalidateTablePages();
+  return { ok: true };
+}
+
+export async function deleteTableAction(formData: FormData): Promise<ValidationResult> {
+  const id = numberValue(formData, "id");
+  if (!id) return { ok: false, formError: "Không tìm thấy bàn cần xóa." };
+
+  const [bookingLinks, waiterLinks] = await Promise.all([
+    db.select({ id: bookings.id }).from(bookings).where(eq(bookings.tableId, id)).limit(1),
+    db.select({ id: waiterRequests.id }).from(waiterRequests).where(eq(waiterRequests.tableId, id)).limit(1),
+  ]);
+
+  if (bookingLinks[0] || waiterLinks[0]) {
+    return { ok: false, formError: "Bàn vẫn đang liên kết với booking hoặc yêu cầu phục vụ. Hãy xử lý liên kết trước khi xóa." };
+  }
+
+  await db.delete(tables).where(eq(tables.id, id));
+  revalidateTablePages();
+  return { ok: true };
+}
+
+export async function importMenuCatalogAction(): Promise<ValidationResult & { sectionCount?: number; itemCount?: number }> {
+  await ensureMenuCatalogTables();
+  const sourceSections = await loadMenuCatalogSource();
+
+  await db.transaction(async (tx) => {
+    for (const [sectionIndex, section] of sourceSections.entries()) {
+      const existingSection = await tx.select({ id: menuSections.id }).from(menuSections).where(eq(menuSections.slug, section.id)).limit(1);
+      let sectionId = existingSection[0]?.id;
+
+      if (sectionId) {
+        await tx.update(menuSections).set({
+          titleI18n: section.title,
+          descriptionI18n: section.description,
+          visible: true,
+          sortOrder: sectionIndex + 1,
+          updatedAt: new Date(),
+        }).where(eq(menuSections.id, sectionId));
+      } else {
+        const inserted = await tx.insert(menuSections).values({
+          slug: section.id,
+          titleI18n: section.title,
+          descriptionI18n: section.description,
+          visible: true,
+          sortOrder: sectionIndex + 1,
+          updatedAt: new Date(),
+        }).returning({ id: menuSections.id });
+        sectionId = inserted[0]?.id;
+      }
+
+      if (!sectionId) throw new Error(`section-import-failed:${section.id}`);
+
+      for (const [itemIndex, item] of section.items.entries()) {
+        const existingItem = await tx.select({ id: menuItems.id }).from(menuItems).where(eq(menuItems.slug, item.id)).limit(1);
+        const payload = {
+          sectionId,
+          slug: item.id,
+          nameI18n: item.name,
+          noteI18n: item.note,
+          descriptionI18n: item.description,
+          priceLabel: item.price,
+          imagePath: item.image,
+          visible: true,
+          sortOrder: itemIndex + 1,
+          updatedAt: new Date(),
+        };
+
+        if (existingItem[0]) {
+          await tx.update(menuItems).set(payload).where(eq(menuItems.id, existingItem[0].id));
+        } else {
+          await tx.insert(menuItems).values(payload);
+        }
+      }
+    }
+  });
+
+  const importedSections = await getMenuSections();
+  const sourceItemCount = sourceSections.reduce((total, section) => total + section.items.length, 0);
+  const importedItemCount = importedSections.reduce((total, section) => total + section.items.length, 0);
+
+  const sourceSectionIds = new Set(sourceSections.map((section) => section.id));
+  const importedSectionIds = new Set(importedSections.map((section) => section.slug));
+  const sourceItemIds = new Set(sourceSections.flatMap((section) => section.items.map((item) => item.id)));
+  const importedItemIds = new Set(importedSections.flatMap((section) => section.items.map((item) => item.slug)));
+
+  const missingSection = [...sourceSectionIds].find((id) => !importedSectionIds.has(id));
+  const missingItem = [...sourceItemIds].find((id) => !importedItemIds.has(id));
+
+  if (sourceSections.length !== importedSections.length || sourceItemCount !== importedItemCount || missingSection || missingItem) {
+    return {
+      ok: false,
+      formError: "Đồng bộ menu thất bại do dữ liệu sau import chưa khớp hoàn toàn với giao diện user.",
+      sectionCount: importedSections.length,
+      itemCount: importedItemCount,
+    };
+  }
+
+  revalidateMenuCatalogPaths();
+  return { ok: true, sectionCount: importedSections.length, itemCount: importedItemCount };
+}
+
+export async function saveMenuSectionAction(formData: FormData): Promise<ValidationResult> {
+  await ensureMenuCatalogTables();
+  const { result, payload, id } = await validateMenuSectionForm(formData);
+  if (!result.ok || !payload) return result;
+
+  if (id) {
+    await db.update(menuSections).set(payload).where(eq(menuSections.id, id));
+  } else {
+    await db.insert(menuSections).values(payload);
+  }
+
+  revalidateMenuCatalogPaths();
+  return { ok: true };
+}
+
+export async function saveMenuItemAction(formData: FormData): Promise<ValidationResult> {
+  await ensureMenuCatalogTables();
+  const { result, payload, id } = await validateMenuItemForm(formData);
+  if (!result.ok || !payload) return result;
+
+  if (id) {
+    await db.update(menuItems).set(payload).where(eq(menuItems.id, id));
+  } else {
+    await db.insert(menuItems).values(payload);
+  }
+
+  revalidateMenuCatalogPaths();
+  return { ok: true };
+}
+
+export async function deleteMenuSectionAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return;
+  await db.delete(menuSections).where(eq(menuSections.id, id));
+  revalidateMenuCatalogPaths();
+}
+
+export async function deleteMenuItemAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return;
+  await db.delete(menuItems).where(eq(menuItems.id, id));
+  revalidateMenuCatalogPaths();
+}
+
+export async function reorderMenuSectionsAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  const targetSortOrder = numberValue(formData, "sortOrder");
+  if (!id || targetSortOrder < 1) return;
+
+  await db.transaction(async (tx) => {
+    const normalizedRows = await normalizeMenuSectionSortOrder(tx);
+    const current = normalizedRows.find((row) => row.id === id);
+    if (!current) return;
+    const max = normalizedRows.length;
+    const next = clampServicePosition(targetSortOrder, 1, max);
+    if (next === current.sortOrder) return;
+
+    await tx.update(menuSections).set({ sortOrder: MENU_ORDER_PARKED_VALUE, updatedAt: new Date() }).where(eq(menuSections.id, id));
+    if (next < current.sortOrder) {
+      await tx.update(menuSections).set({ sortOrder: sql`${menuSections.sortOrder} + 1`, updatedAt: new Date() }).where(and(gte(menuSections.sortOrder, next), lte(menuSections.sortOrder, current.sortOrder - 1)));
+    } else {
+      await tx.update(menuSections).set({ sortOrder: sql`${menuSections.sortOrder} - 1`, updatedAt: new Date() }).where(and(gte(menuSections.sortOrder, current.sortOrder + 1), lte(menuSections.sortOrder, next)));
+    }
+    await tx.update(menuSections).set({ sortOrder: next, updatedAt: new Date() }).where(eq(menuSections.id, id));
+  });
+
+  revalidateMenuCatalogPaths();
+}
+
+export async function reorderMenuItemsAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  const sectionId = numberValue(formData, "sectionId");
+  const targetSortOrder = numberValue(formData, "sortOrder");
+  if (!id || !sectionId || targetSortOrder < 1) return;
+
+  await db.transaction(async (tx) => {
+    const normalizedRows = await normalizeMenuItemSortOrder(tx, sectionId);
+    const current = normalizedRows.find((row) => row.id === id);
+    if (!current) return;
+    const max = normalizedRows.length;
+    const next = clampServicePosition(targetSortOrder, 1, max);
+    if (next === current.sortOrder) return;
+
+    await tx.update(menuItems).set({ sortOrder: MENU_ORDER_PARKED_VALUE, updatedAt: new Date() }).where(eq(menuItems.id, id));
+    if (next < current.sortOrder) {
+      await tx.update(menuItems).set({ sortOrder: sql`${menuItems.sortOrder} + 1`, updatedAt: new Date() }).where(and(eq(menuItems.sectionId, sectionId), gte(menuItems.sortOrder, next), lte(menuItems.sortOrder, current.sortOrder - 1)));
+    } else {
+      await tx.update(menuItems).set({ sortOrder: sql`${menuItems.sortOrder} - 1`, updatedAt: new Date() }).where(and(eq(menuItems.sectionId, sectionId), gte(menuItems.sortOrder, current.sortOrder + 1), lte(menuItems.sortOrder, next)));
+    }
+    await tx.update(menuItems).set({ sortOrder: next, updatedAt: new Date() }).where(eq(menuItems.id, id));
+  });
+
+  revalidateMenuCatalogPaths();
 }
 
 export async function saveWaiterRequestAction(formData: FormData) {

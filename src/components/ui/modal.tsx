@@ -69,7 +69,7 @@ export function Modal({
           </h3>
           <button 
             onClick={onClose}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--forest-dark)]/5 text-[var(--forest-dark)] transition-all hover:bg-[var(--forest-dark)]/10 hover:rotate-90"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--forest-dark)]/5 text-[var(--forest-dark)] transition-all duration-200 enabled:cursor-pointer hover:-translate-y-[1px] hover:bg-[var(--forest-dark)]/10 hover:rotate-90 hover:shadow-[0_12px_22px_rgba(45,82,44,0.12)]"
           >
             <X className="h-6 w-6" />
           </button>

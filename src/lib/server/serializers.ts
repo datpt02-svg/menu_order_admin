@@ -1,6 +1,8 @@
 import type {
   bookingConfigs,
   bookings,
+  menuItems,
+  menuSections,
   services,
   staffAssignments,
   staffMembers,
@@ -28,6 +30,26 @@ export type TableRow = typeof tables.$inferSelect & {
 };
 
 export type ServiceRow = typeof services.$inferSelect;
+
+export type MenuSectionRow = typeof menuSections.$inferSelect;
+export type MenuItemRow = typeof menuItems.$inferSelect;
+export type MenuSectionWithItemsRow = MenuSectionRow & {
+  items: MenuItemRow[];
+};
+export type UserMenuItemRow = {
+  id: string;
+  name: Record<string, string>;
+  note: Record<string, string>;
+  description: Record<string, string>;
+  price: string;
+  image: string;
+};
+export type UserMenuSectionRow = {
+  id: string;
+  title: Record<string, string>;
+  description: Record<string, string>;
+  items: UserMenuItemRow[];
+};
 
 export type StaffMemberRow = typeof staffMembers.$inferSelect & {
   preferredZoneName?: string | null;

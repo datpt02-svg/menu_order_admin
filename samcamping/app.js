@@ -573,7 +573,7 @@ const imageSet = {
   cookies: "./assets/product-3.webp",
 };
 
-const sections = [
+const fallbackSections = [
   {
     "id": "khu-bbq",
     "title": {
@@ -1872,6 +1872,8 @@ const sections = [
   }
 ];
 
+let sections = fallbackSections;
+
 const localizedMenuOverrides = {
   sections: {
     "khu-bbq": {
@@ -2182,8 +2184,10 @@ const state = {
   },
   bookingHistory: [],
   bookingHistorySearch: "",
-  bookingHistoryFrom: "",
-  bookingHistoryTo: "",
+  bookingHistoryFrom: getTodayDateValue(),
+  bookingHistoryTo: getTodayDateValue(),
+  bookingHistoryDateField: "",
+  bookingHistoryDateMonth: "",
   bookingHistoryVisibleCount: 5,
   bookingHistoryNextCursor: "",
   bookingHistoryLoading: false,
@@ -2201,6 +2205,59 @@ const state = {
 
 const BOOKING_STORAGE_KEY = "samcamping_latest_booking";
 const BOOKING_REALTIME_EVENTS = ["booking:updated", "booking:deleted"];
+
+function getTodayDateValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentTimeValue() {
+  return new Date().toTimeString().slice(0, 5);
+}
+
+function isBookingToday() {
+  return state.bookingDraft.bookingDate === getTodayDateValue();
+}
+
+function getBookingTimeMinValue() {
+  return isBookingToday() ? getCurrentTimeValue() : "00:00";
+}
+
+function isPastBookingDateTime(dateValue, timeValue) {
+  if (!dateValue || !timeValue) return false;
+  const bookingDateTime = new Date(`${dateValue}T${timeValue}:00`);
+  return !Number.isNaN(bookingDateTime.getTime()) && bookingDateTime.getTime() < Date.now();
+}
+
+function clampBookingDateTime() {
+  if (!isBookingToday()) return;
+  const minTime = getBookingTimeMinValue();
+  if (state.bookingDraft.bookingTime && state.bookingDraft.bookingTime < minTime) {
+    state.bookingDraft.bookingTime = minTime;
+  }
+}
+
+function getRenderableBookingTimeValue() {
+  if (!state.bookingDraft.bookingTime) return "";
+  if (isBookingToday() && state.bookingDraft.bookingTime < getBookingTimeMinValue()) {
+    return getBookingTimeMinValue();
+  }
+  return state.bookingDraft.bookingTime;
+}
+
+function syncRenderableBookingDateTime() {
+  if (state.bookingDraft.bookingDate && state.bookingDraft.bookingDate < getTodayDateValue()) {
+    state.bookingDraft.bookingDate = getTodayDateValue();
+  }
+  if (!state.bookingDraft.bookingTime) return;
+  const nextTime = getRenderableBookingTimeValue();
+  if (nextTime !== state.bookingDraft.bookingTime) {
+    state.bookingDraft.bookingTime = nextTime;
+  }
+}
 
 let bookingRealtimeSocket = null;
 let bookingRealtimeListeners = [];
@@ -2460,7 +2517,6 @@ function getBookingFieldErrors() {
   } else if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(bookingTime)) {
     errors.bookingTime = `${copy.fieldTime} chưa hợp lệ.`;
   }
-
   if (note.length > 1000) {
     errors.note = `${copy.fieldNote} quá dài.`;
   }
@@ -2520,6 +2576,10 @@ function moveToBookingStep(nextStep) {
 
 function handleBookingFieldChange(field, value) {
   state.bookingDraft[field] = value;
+  const shouldResyncDateTime = field === "bookingDate" || field === "bookingTime";
+  if (shouldResyncDateTime) {
+    clampBookingDateTime();
+  }
   clearBookingFieldError(field);
   state.bookingError = "";
 
@@ -2528,6 +2588,10 @@ function handleBookingFieldChange(field, value) {
     if (nextErrors[field]) {
       state.bookingFieldErrors = { ...state.bookingFieldErrors, [field]: nextErrors[field] };
     }
+  }
+
+  if (shouldResyncDateTime) {
+    renderBookingFlow();
   }
 }
 
@@ -3114,26 +3178,38 @@ async function handleHistoryCall(phone) {
 }
 
 function restoreHistoryFocus(field, value, selectionStart, selectionEnd) {
-  if (!field) return;
-  const selector = field === "search"
-    ? '#history-search-input'
-    : field === "from"
-      ? '#history-filter-from'
-      : field === "to"
-        ? '#history-filter-to'
-        : "";
+  if (!field || field === "search") return;
+  const selector = field === "from"
+    ? '#history-filter-from'
+    : field === "to"
+      ? '#history-filter-to'
+      : "";
   if (!selector) return;
   requestAnimationFrame(() => {
     const input = document.querySelector(selector);
     if (!(input instanceof HTMLInputElement)) return;
     input.focus();
-    if (field === "search") {
+    if (typeof value === "string" && input.value !== value) {
       input.value = value;
-      const start = typeof selectionStart === "number" ? selectionStart : value.length;
-      const end = typeof selectionEnd === "number" ? selectionEnd : value.length;
-      input.setSelectionRange(start, end);
+    }
+    if (typeof selectionStart === "number" && typeof selectionEnd === "number") {
+      input.setSelectionRange(selectionStart, selectionEnd);
     }
   });
+}
+
+function getHistoryResultsMarkup(copy, locale) {
+  const bookings = getVisibleBookingHistory();
+  return `${renderHistoryList(bookings, copy, locale)}${renderHistoryFooter()}`;
+}
+
+function renderHistoryResults() {
+  if (!historyFlow) return;
+  const results = historyFlow.querySelector('[data-history-results]');
+  if (!(results instanceof HTMLElement)) return;
+  const locale = locales[state.locale];
+  const copy = uiCopy[state.locale] || uiCopy.en;
+  results.innerHTML = getHistoryResultsMarkup(copy, locale);
 }
 
 function renderHistoryCallBlock(locale) {
@@ -3177,14 +3253,81 @@ function renderHistoryToolbar(copy) {
     </div>`;
 }
 
-function renderHistoryToolbarWithSummary(copy, filterSummary) {
-  return `${renderHistoryToolbar(copy)}${filterSummary ? `<div class="history-filter-summary">${escapeHtml(filterSummary)}</div>` : ""}`;
+function syncHistoryDateField(field, value) {
+  state[field === "from" ? "bookingHistoryFrom" : "bookingHistoryTo"] = value;
+  state.bookingHistoryVisibleCount = 5;
+  fetchApprovedBookingHistory()
+    .finally(() => {
+      renderHistoryFlowBound();
+    });
 }
+
+function renderHistoryFlowBound() {
+  renderHistoryFlow();
+}
+
+function renderHistoryResultsBound() {
+  renderHistoryResults();
+}
+
+function isHistoryDateInputElement(element) {
+  return element instanceof HTMLInputElement
+    && element.type === "date"
+    && (element.dataset.historyInput === "from" || element.dataset.historyInput === "to");
+}
+
+function isEditingHistoryDateFilter() {
+  return isHistoryDateInputElement(document.activeElement);
+}
+
+function shouldRefreshHistoryUi() {
+  return !isEditingHistoryDateFilter();
+}
+
+function isHistoryDateTrigger() {
+  return false;
+}
+
+function isHistoryDateCloseButton() {
+  return false;
+}
+
+function isHistoryDateClearButton() {
+  return false;
+}
+
+function isHistoryDateTodayButton() {
+  return false;
+}
+
+function isHistoryDateApplyButton() {
+  return false;
+}
+
+function isHistoryDateNavButton() {
+  return false;
+}
+
+function isHistoryDateDayButton() {
+  return false;
+}
+
+function isHistoryDatePartSelect() {
+  return false;
+}
+
+function syncHistoryDatePickerDayOptions() {}
+
+function syncHistoryDatePickerDayOptions() {}
 
 function renderHistoryFlowWithFocus(focusState) {
   renderHistoryFlow();
   if (!focusState) return;
   restoreHistoryFocus(focusState.field, focusState.value, focusState.selectionStart, focusState.selectionEnd);
+}
+
+function renderHistoryToolbarWithSummary(copy, filterSummary) {
+  return `${renderHistoryToolbar(copy)}${filterSummary ? `<div class="history-filter-summary">${escapeHtml(filterSummary)}</div>` : ""}`;
 }
 
 function renderHistoryCardActions() {
@@ -3256,14 +3399,26 @@ function handlePolledBookingStatus(booking) {
   if (booking.status === "confirmed" || booking.status === "deposit_rejected") {
     stopBookingStatusPolling();
   }
-  renderHistoryFlow();
+  if (shouldRefreshHistoryUi()) {
+    renderHistoryFlowBound();
+  }
   if (bookingModal?.open) {
     if (openBookingFlowForLatestBooking(booking)) {
-      renderBookingFlow();
+      if (shouldRefreshBookingModal(booking)) {
+        renderBookingFlow();
+      }
     } else {
       bookingModal.close();
     }
   }
+}
+
+function refreshBookingHistoryUi() {
+  if (!historyFlow?.querySelector('[data-history-results]')) {
+    renderHistoryFlowBound();
+    return;
+  }
+  renderHistoryResultsBound();
 }
 
 function startBookingStatusPolling() {
@@ -3305,8 +3460,10 @@ function refreshLatestBookingStatusAndRender() {
         return booking;
       }
       syncBookingUiFromLatestBooking();
-      renderHistoryFlow();
-      if (bookingModal?.open) renderBookingFlow();
+      if (shouldRefreshHistoryUi()) {
+        renderHistoryFlowBound();
+      }
+      if (shouldRefreshBookingModal(booking)) renderBookingFlow();
       return booking;
     })
     .catch(() => null);
@@ -3930,26 +4087,28 @@ function renderWaiterFlow() {
                   <div class="waiter-section-title">${copy.groceryTitle}</div>
                   <p>${copy.groceryHint}</p>
                 </div>
-                <div class="waiter-grocery-grid">
-                  ${groceryItems
-                    .map(
-                      (item) => `
-                        <label class="waiter-grocery-option">
-                          <input
-                            type="checkbox"
-                            value="${item.id}"
-                            data-waiter-grocery
-                            ${state.waiterDraft.groceryItems.includes(item.id) ? "checked" : ""}
-                          />
-                          <span>
-                            <strong>${t(item.name)}</strong>
-                            <small>${item.price}</small>
-                          </span>
-                        </label>
-                      `
-                    )
-                    .join("")}
-                </div>
+                ${groceryItems.length
+                  ? `<div class="waiter-grocery-grid">
+                      ${groceryItems
+                        .map(
+                          (item) => `
+                            <label class="waiter-grocery-option">
+                              <input
+                                type="checkbox"
+                                value="${item.id}"
+                                data-waiter-grocery
+                                ${state.waiterDraft.groceryItems.includes(item.id) ? "checked" : ""}
+                              />
+                              <span>
+                                <strong>${t(item.name)}</strong>
+                                <small>${item.price}</small>
+                              </span>
+                            </label>
+                          `
+                        )
+                        .join("")}
+                    </div>`
+                  : `<p class="waiter-error">${copy.noItems}</p>`}
               </div>
             `
             : ""
@@ -4006,14 +4165,32 @@ function renderHistoryFlow() {
   if (!historyFlow) return;
   const locale = locales[state.locale];
   const copy = uiCopy[state.locale] || uiCopy.en;
-  const bookings = getVisibleBookingHistory();
   const filterSummary = getHistoryFilterSummary(copy);
 
   historyFlow.innerHTML = `
     ${renderHistoryHeader(copy, filterSummary, locale)}
-    ${renderHistoryList(bookings, copy, locale)}
-    ${renderHistoryFooter()}
+    <div data-history-results>
+      ${getHistoryResultsMarkup(copy, locale)}
+    </div>
   `;
+}
+
+function isBookingFormField(element) {
+  return element instanceof HTMLElement && Boolean(element.closest('[data-booking-input]'));
+}
+
+function isEditingBookingForm() {
+  return Boolean(
+    bookingModal?.open
+    && state.bookingStep === "form"
+    && isBookingFormField(document.activeElement)
+  );
+}
+
+function shouldRefreshBookingModal(booking) {
+  if (!bookingModal?.open) return false;
+  if (booking?.status === "confirmed" || booking?.status === "deposit_rejected") return true;
+  return !isEditingBookingForm();
 }
 
 function getBookingServices() {
@@ -4026,6 +4203,7 @@ function findBookingService(serviceId) {
 
 function renderBookingFlow() {
   if (!bookingFlow) return;
+  syncRenderableBookingDateTime();
   const locale = locales[state.locale];
   const copy = uiCopy[state.locale] || uiCopy.en;
 
@@ -4115,12 +4293,12 @@ function renderBookingFlow() {
           </div>
           <div class="booking-field ${renderBookingFieldClass("bookingDate")} ">
             <label for="booking-date">${copy.fieldDate}</label>
-            <input id="booking-date" type="date" data-booking-input="bookingDate" value="${escapeHtml(state.bookingDraft.bookingDate)}" />
+            <input id="booking-date" type="date" min="${getTodayDateValue()}" data-booking-input="bookingDate" value="${escapeHtml(state.bookingDraft.bookingDate)}" />
             ${renderBookingFieldError("bookingDate")}
           </div>
           <div class="booking-field ${renderBookingFieldClass("bookingTime")} ">
             <label for="booking-time">${copy.fieldTime}</label>
-            <input id="booking-time" type="time" data-booking-input="bookingTime" value="${escapeHtml(state.bookingDraft.bookingTime)}" />
+            <input id="booking-time" type="time" min="${escapeHtml(getBookingTimeMinValue())}" data-booking-input="bookingTime" value="${escapeHtml(getRenderableBookingTimeValue())}" />
             ${renderBookingFieldError("bookingTime")}
           </div>
           <div class="booking-field booking-field--full ${renderBookingFieldClass("note")}">
@@ -4278,6 +4456,21 @@ function renderStaticText() {
   if (zaloTrigger) zaloTrigger.setAttribute("aria-label", locale.zaloConnect);
   callWaiterTrigger.setAttribute("aria-label", locale.callWaiter);
   historyTrigger.setAttribute("aria-label", locale.history);
+}
+
+async function loadMenuSections() {
+  const response = await fetch(buildApiUrl("/api/menu-catalog"));
+  if (!response.ok) throw new Error("menu-catalog-fetch-failed");
+  const result = await response.json();
+  const nextSections = Array.isArray(result?.sections) ? result.sections : [];
+  if (nextSections.length === 0) throw new Error("menu-catalog-empty");
+  sections = nextSections;
+  if (!sections.find((section) => section.id === state.activeSection)) {
+    state.activeSection = sections[0]?.id || "";
+  }
+  if (state.selectedItemId && !findItem(state.selectedItemId)) {
+    state.selectedItemId = null;
+  }
 }
 
 function renderCategories() {
@@ -4748,18 +4941,25 @@ document.addEventListener("input", (event) => {
   if (historyField === "search") {
     state.bookingHistorySearch = target.value;
     state.bookingHistoryVisibleCount = 5;
-    renderHistoryFlowWithFocus({
-      field: "search",
-      value: target.value,
-      selectionStart: target.selectionStart,
-      selectionEnd: target.selectionEnd,
-    });
+    refreshBookingHistoryUi();
   }
 });
 
 document.addEventListener("change", (event) => {
   const target = event.target;
+  if (isHistoryDatePartSelect(target)) {
+    syncHistoryDatePickerDayOptions();
+    return;
+  }
+  if (isHistoryDateInputElement(target)) {
+    syncHistoryDateField(target.dataset.historyInput || "", target.value);
+    return;
+  }
   if (!(target instanceof HTMLInputElement)) return;
+  if (target.dataset.bookingInput === "bookingDate" || target.dataset.bookingInput === "bookingTime") {
+    handleBookingFieldChange(target.dataset.bookingInput, target.value);
+    return;
+  }
   if (target.id === "booking-receipt") {
     const file = target.files?.[0];
     if (!file) return;
@@ -4796,15 +4996,6 @@ document.addEventListener("change", (event) => {
         if (latestBooking) {
           setHistoryBookingError(latestBooking, getBookingReceiptUploadErrorMessage());
         }
-        renderHistoryFlow();
-      });
-    return;
-  }
-  if (target.dataset.historyInput === "from" || target.dataset.historyInput === "to") {
-    state[target.dataset.historyInput === "from" ? "bookingHistoryFrom" : "bookingHistoryTo"] = target.value;
-    state.bookingHistoryVisibleCount = 5;
-    fetchApprovedBookingHistory()
-      .finally(() => {
         renderHistoryFlow();
       });
     return;
@@ -4864,7 +5055,9 @@ historyTrigger.addEventListener("click", () => {
       .catch(() => []),
   ]).finally(() => {
     state.bookingHistoryVisibleCount = 5;
-    renderHistoryFlow();
+    if (!state.bookingHistoryFrom) state.bookingHistoryFrom = getTodayDateValue();
+    if (!state.bookingHistoryTo) state.bookingHistoryTo = getTodayDateValue();
+    renderHistoryFlowBound();
     historyModal.showModal();
     startBookingStatusPolling();
     attachBookingRealtime();
@@ -4908,6 +5101,10 @@ infoTrigger.addEventListener("keydown", (event) => {
 });
 
 Promise.all([
+  loadMenuSections().catch(() => {
+    applyLocalizedMenuOverrides();
+    state.activeSection = sections[0]?.id || state.activeSection;
+  }),
   loadBookingServices().catch(() => {
     state.bookingServices = [];
   }),

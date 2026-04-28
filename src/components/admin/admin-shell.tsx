@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { unstable_noStore as noStore } from "next/cache";
-import { BellRing, CalendarDays, LayoutDashboard, Map, UtensilsCrossed, UserRoundCog, UsersRound } from "lucide-react";
+import { BellRing, CalendarDays, LayoutDashboard, Map, NotebookTabs, UtensilsCrossed, UserRoundCog, UsersRound } from "lucide-react";
 
 import { NotificationCenter } from "@/components/admin/notification-center";
 import { RealtimeSync } from "@/components/admin/realtime-sync";
@@ -40,6 +40,7 @@ const navItems = [
   { href: "/waiter-requests", label: "Gọi nhân viên", icon: BellRing },
   { href: "/tables", label: "Bàn / Khu vực", icon: Map },
   { href: "/services", label: "Dịch vụ", icon: UtensilsCrossed },
+  { href: "/menu", label: "Menu món", icon: NotebookTabs },
   { href: "/settings", label: "Settings", icon: BellRing },
 ] as const;
 
@@ -169,10 +170,10 @@ export async function AdminShell({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-[18px] px-4 py-3 text-sm font-semibold transition",
+                    "flex items-center gap-3 rounded-[18px] px-4 py-3 text-sm font-semibold transition-all duration-200",
                     active
                       ? "bg-[var(--mint-strong)] text-[var(--forest-dark)] shadow-[0_12px_22px_rgba(45,82,44,0.08)]"
-                      : "text-[var(--forest)] hover:bg-white/50",
+                      : "text-[var(--forest)] hover:-translate-y-[1px] hover:bg-white/60 hover:shadow-[0_12px_22px_rgba(45,82,44,0.1)]",
                   )}
                 >
                   <span className={cn("flex h-10 w-10 items-center justify-center rounded-full", active ? "bg-white/75" : "bg-[rgba(63,111,66,0.08)]")}>
