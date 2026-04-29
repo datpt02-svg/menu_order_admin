@@ -1,7 +1,7 @@
 "use client";
 
-import { Edit, ImagePlus, Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { Check, Edit, ImagePlus, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -11,7 +11,10 @@ import {
   reorderMenuSectionsAction,
   saveMenuItemAction,
   saveMenuSectionAction,
+  toggleMenuItemVisibleAction,
+  toggleMenuSectionVisibleAction,
 } from "@/app/(admin)/actions";
+import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/admin/section-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +22,77 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FieldError, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import type { MenuSectionWithItemsRow } from "@/lib/server/serializers";
+
+function VisibleDropdown({
+  id,
+  visible,
+  onToggle,
+  isPending,
+}: {
+  id: number;
+  visible: boolean;
+  onToggle: (id: number, visible: boolean) => void;
+  isPending: boolean;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const details = detailsRef.current;
+      if (!details?.open) return;
+      if (event.target instanceof Node && details.contains(event.target)) return;
+      details.open = false;
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  const options = [
+    { value: true, label: "Hiện" },
+    { value: false, label: "Ẩn" },
+  ];
+
+  return (
+    <details ref={detailsRef} className="group relative shrink-0">
+      <summary className="list-none marker:hidden [&::-webkit-details-marker]:hidden">
+        <Badge
+          tone={visible ? "success" : "warning"}
+          className={cn(
+            "cursor-pointer transition-opacity duration-200 hover:opacity-90 whitespace-nowrap",
+            isPending && "pointer-events-none opacity-60",
+          )}
+        >
+          {visible ? "Hiện" : "Ẩn"}
+        </Badge>
+      </summary>
+      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden min-w-[140px] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur group-open:block">
+        <div className="space-y-1">
+          {options.map((option) => {
+            const isActive = option.value === visible;
+            return (
+              <button
+                key={String(option.value)}
+                type="button"
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
+                  isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
+                )}
+                disabled={isPending || isActive}
+                onClick={() => {
+                  detailsRef.current?.removeAttribute("open");
+                  onToggle(id, option.value);
+                }}
+              >
+                <span>{option.label}</span>
+                {isActive ? <Check className="h-4 w-4" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </details>
+  );
+}
 
 type ActionValidationResult = {
   ok: boolean;
@@ -38,6 +112,7 @@ const locales = ["vi", "en", "zh", "ko", "ja"] as const;
 export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [visiblePendingId, setVisiblePendingId] = useState<{ type: "section" | "item"; id: number } | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
   const [deleteState, setDeleteState] = useState<{ type: "section" | "item"; id: number } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -75,6 +150,30 @@ export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] 
   const closeModal = () => {
     setModalState(null);
     resetForm();
+  };
+
+  const handleToggleSectionVisible = (id: number, visible: boolean) => {
+    setVisiblePendingId({ type: "section", id });
+    const formData = new FormData();
+    formData.set("id", String(id));
+    formData.set("visible", visible ? "true" : "");
+    startTransition(async () => {
+      await toggleMenuSectionVisibleAction(formData);
+      setVisiblePendingId(null);
+      router.refresh();
+    });
+  };
+
+  const handleToggleItemVisible = (id: number, visible: boolean) => {
+    setVisiblePendingId({ type: "item", id });
+    const formData = new FormData();
+    formData.set("id", String(id));
+    formData.set("visible", visible ? "true" : "");
+    startTransition(async () => {
+      await toggleMenuItemVisibleAction(formData);
+      setVisiblePendingId(null);
+      router.refresh();
+    });
   };
 
   const onReorderSection = (id: number, sortOrder: number) => {
@@ -200,7 +299,12 @@ export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] 
                   <div className="min-w-0 lg:w-[46%] lg:shrink-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-xl font-bold text-[var(--forest-dark)]">{section.titleI18n.vi}</h3>
-                      <Badge tone={section.visible ? "success" : "warning"}>{section.visible ? "Hiện" : "Ẩn"}</Badge>
+                      <VisibleDropdown
+                        id={section.id}
+                        visible={section.visible}
+                        isPending={visiblePendingId?.type === "section" && visiblePendingId.id === section.id}
+                        onToggle={handleToggleSectionVisible}
+                      />
                     </div>
                     <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{section.descriptionI18n.vi}</p>
                   </div>
@@ -234,7 +338,12 @@ export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] 
                           <div className="font-bold text-[var(--forest-dark)]">{item.nameI18n.vi}</div>
                           <div className="mt-1 text-xs text-[var(--muted)]">{item.noteI18n.vi}</div>
                         </div>
-                        <Badge tone={item.visible ? "success" : "warning"}>{item.visible ? "Hiện" : "Ẩn"}</Badge>
+                        <VisibleDropdown
+                          id={item.id}
+                          visible={item.visible}
+                          isPending={visiblePendingId?.type === "item" && visiblePendingId.id === item.id}
+                          onToggle={handleToggleItemVisible}
+                        />
                       </div>
                       <div className="mt-2 text-lg font-bold text-[var(--forest)]">{item.priceLabel}</div>
                       <p className="mt-2 pb-5 line-clamp-2 text-sm leading-6 text-[var(--muted)]">{item.descriptionI18n.vi}</p>

@@ -1445,6 +1445,31 @@ export async function saveMenuItemAction(formData: FormData): Promise<Validation
   return { ok: true };
 }
 
+export async function toggleMenuSectionVisibleAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return;
+  const visible = isTruthyValue(valueOf(formData, "visible"));
+  await db.update(menuSections).set({ visible, updatedAt: new Date() }).where(eq(menuSections.id, id));
+  revalidateMenuCatalogPaths();
+}
+
+export async function toggleMenuItemVisibleAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return;
+  const visible = isTruthyValue(valueOf(formData, "visible"));
+  await db.update(menuItems).set({ visible, updatedAt: new Date() }).where(eq(menuItems.id, id));
+  revalidateMenuCatalogPaths();
+}
+
+export async function toggleServiceVisibleAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return;
+  const visible = isTruthyValue(valueOf(formData, "visible"));
+  await db.update(services).set({ visible, updatedAt: new Date() }).where(eq(services.id, id));
+  revalidatePath("/dashboard");
+  revalidatePath("/services");
+}
+
 export async function deleteMenuSectionAction(formData: FormData) {
   const id = numberValue(formData, "id");
   if (!id) return;

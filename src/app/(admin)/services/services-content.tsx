@@ -1,10 +1,11 @@
 "use client";
 
-import { Edit, Save, Trash2, Plus, ImagePlus, Loader2 } from "lucide-react";
+import { Check, Edit, Save, Trash2, Plus, ImagePlus, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { deleteServiceAction, saveServiceAction } from "@/app/(admin)/actions";
+import { deleteServiceAction, saveServiceAction, toggleServiceVisibleAction } from "@/app/(admin)/actions";
+import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/admin/section-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,77 @@ type ActionValidationResult = {
 };
 
 type ZoneItem = Pick<ZoneRow, "id" | "slug" | "name">;
+
+function VisibleDropdown({
+  id,
+  visible,
+  onToggle,
+  isPending,
+}: {
+  id: number;
+  visible: boolean;
+  onToggle: (id: number, visible: boolean) => void;
+  isPending: boolean;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const details = detailsRef.current;
+      if (!details?.open) return;
+      if (event.target instanceof Node && details.contains(event.target)) return;
+      details.open = false;
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  const options = [
+    { value: true, label: "Hiện" },
+    { value: false, label: "Ẩn" },
+  ];
+
+  return (
+    <details ref={detailsRef} className="group relative shrink-0">
+      <summary className="list-none marker:hidden [&::-webkit-details-marker]:hidden">
+        <Badge
+          tone={visible ? "success" : "warning"}
+          className={cn(
+            "cursor-pointer transition-opacity duration-200 hover:opacity-90 whitespace-nowrap",
+            isPending && "pointer-events-none opacity-60",
+          )}
+        >
+          {visible ? "Hiện" : "Ẩn"}
+        </Badge>
+      </summary>
+      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden min-w-[140px] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur group-open:block">
+        <div className="space-y-1">
+          {options.map((option) => {
+            const isActive = option.value === visible;
+            return (
+              <button
+                key={String(option.value)}
+                type="button"
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
+                  isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
+                )}
+                disabled={isPending || isActive}
+                onClick={() => {
+                  detailsRef.current?.removeAttribute("open");
+                  onToggle(id, option.value);
+                }}
+              >
+                <span>{option.label}</span>
+                {isActive ? <Check className="h-4 w-4" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </details>
+  );
+}
 
 function getZoneLabel(zoneSlug: string | null, zoneNameBySlug: Map<string, string>) {
   if (!zoneSlug) return "Không gán khu";
@@ -82,6 +154,7 @@ function formatPriceLabel(value: string) {
 export function ServicesContent({ services, zones }: { services: ServiceItem[]; zones: ZoneItem[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [visiblePendingId, setVisiblePendingId] = useState<number | null>(null);
   const [selectedItem, setSelectedItem] = useState<ServiceItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -243,6 +316,18 @@ export function ServicesContent({ services, zones }: { services: ServiceItem[]; 
     }
   };
 
+  const handleToggleVisible = (id: number, visible: boolean) => {
+    setVisiblePendingId(id);
+    const formData = new FormData();
+    formData.set("id", String(id));
+    formData.set("visible", visible ? "true" : "");
+    startTransition(async () => {
+      await toggleServiceVisibleAction(formData);
+      setVisiblePendingId(null);
+      router.refresh();
+    });
+  };
+
   const handleAdd = () => {
     resetFormState(null);
     setIsModalOpen(true);
@@ -379,9 +464,12 @@ export function ServicesContent({ services, zones }: { services: ServiceItem[]; 
                   <div className="flex items-start justify-between gap-2">
                     <div className="leading-tight font-bold text-[var(--forest-dark)]">{item.name}</div>
                     <div className="flex shrink-0 flex-col items-end gap-2">
-                      <Badge tone={item.visible ? "success" : "warning"}>
-                        {item.visible ? "Hiện" : "Ẩn"}
-                      </Badge>
+                      <VisibleDropdown
+                        id={item.id}
+                        visible={item.visible}
+                        isPending={visiblePendingId === item.id}
+                        onToggle={handleToggleVisible}
+                      />
                       <Badge tone={item.bookingEnabled ? "info" : "default"}>
                         {item.bookingEnabled ? "Booking" : "Không booking"}
                       </Badge>

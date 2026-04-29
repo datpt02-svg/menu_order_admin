@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Check, Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -11,7 +11,9 @@ import {
   saveStaffAssignmentVoidAction,
   saveStaffMemberAction,
   saveStaffShiftAction,
+  toggleStaffStatusAction,
 } from "@/app/(admin)/actions";
+import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/admin/section-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,6 +74,88 @@ type StaffContentProps = {
   };
 };
 
+type StaffStatus = "active" | "inactive";
+
+function getStaffStatusLabel(status: string): string {
+  if (status === "active") return "Đang hoạt động";
+  return "Tạm nghỉ";
+}
+
+function getStaffStatusTone(status: string) {
+  return status === "active" ? "success" as const : "warning" as const;
+}
+
+const staffStatusOptions: Array<{ value: StaffStatus; label: string }> = [
+  { value: "active", label: "Đang hoạt động" },
+  { value: "inactive", label: "Tạm nghỉ" },
+];
+
+function StaffStatusDropdown({
+  staff,
+  isPending,
+  onUpdate,
+}: {
+  staff: StaffItem;
+  isPending: boolean;
+  onUpdate: (id: number, status: StaffStatus) => void;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const details = detailsRef.current;
+      if (!details?.open) return;
+      if (event.target instanceof Node && details.contains(event.target)) return;
+      details.open = false;
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  const currentStatus = (staff.status === "active" || staff.status === "inactive") ? staff.status : "inactive";
+
+  return (
+    <details ref={detailsRef} className="group relative shrink-0">
+      <summary className="list-none marker:hidden [&::-webkit-details-marker]:hidden">
+        <Badge
+          tone={getStaffStatusTone(currentStatus)}
+          className={cn(
+            "cursor-pointer transition-opacity duration-200 hover:opacity-90 whitespace-nowrap",
+            isPending && "pointer-events-none opacity-60",
+          )}
+        >
+          {getStaffStatusLabel(currentStatus)}
+        </Badge>
+      </summary>
+      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden min-w-[180px] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur group-open:block">
+        <div className="space-y-1">
+          {staffStatusOptions.map((option) => {
+            const isActive = option.value === currentStatus;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
+                  isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
+                )}
+                disabled={isPending || isActive}
+                onClick={() => {
+                  detailsRef.current?.removeAttribute("open");
+                  onUpdate(staff.id, option.value);
+                }}
+              >
+                <span>{option.label}</span>
+                {isActive ? <Check className="h-4 w-4" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function getRoleLabel(role: string) {
   if (role === "manager") return "Quản lý";
   if (role === "service") return "Phục vụ";
@@ -80,9 +164,6 @@ function getRoleLabel(role: string) {
   return "Hỗ trợ";
 }
 
-function getStatusTone(status: string) {
-  return status === "active" ? "success" as const : "warning" as const;
-}
 
 function getAssignmentTone(status: string) {
   if (status === "confirmed") return "success" as const;
@@ -104,6 +185,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
   const assignment = activeModal === "assignment" ? selectedItem as AssignmentItem : null;
   
   // Delete confirm state
+  const [statusPendingId, setStatusPendingId] = useState<number | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; type: "staff" | "shift" | "assignment" } | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -138,6 +220,18 @@ export function StaffContent({ initialData }: StaffContentProps) {
   const handleEdit = (type: "staff" | "shift" | "assignment", item: StaffItem | ShiftItem | AssignmentItem) => {
     setSelectedItem(item);
     setActiveModal(type);
+  };
+
+  const handleStatusUpdate = (id: number, status: StaffStatus) => {
+    setStatusPendingId(id);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("id", String(id));
+      formData.append("active", status === "active" ? "true" : "");
+      await toggleStaffStatusAction(formData);
+      setStatusPendingId(null);
+      router.refresh();
+    });
   };
 
   const handleAdd = (type: "staff" | "shift" | "assignment") => {
@@ -250,7 +344,11 @@ export function StaffContent({ initialData }: StaffContentProps) {
                         <td className="py-4 pr-4 text-[var(--forest)]">{getRoleLabel(staff.role)}</td>
                         <td className="py-4 pr-4 text-[var(--muted)]">{staff.preferredZoneName ?? "Linh hoạt"}</td>
                         <td className="py-4">
-                          <Badge tone={getStatusTone(staff.status)}>{staff.status}</Badge>
+                          <StaffStatusDropdown
+                            staff={staff}
+                            isPending={statusPendingId === staff.id}
+                            onUpdate={handleStatusUpdate}
+                          />
                         </td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end gap-2">
