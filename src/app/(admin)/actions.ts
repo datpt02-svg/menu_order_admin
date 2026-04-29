@@ -1051,6 +1051,41 @@ export async function saveBookingAction(formData: FormData): Promise<ValidationR
   return { ok: true };
 }
 
+export async function updateBookingStatusAction(formData: FormData): Promise<ValidationResult> {
+  const id = numberValue(formData, "id");
+  const statusValue = valueOf(formData, "status");
+
+  if (!id) {
+    return { ok: false, formError: "Không tìm thấy booking cần cập nhật trạng thái." };
+  }
+
+  if (!VALID_BOOKING_STATUSES.has(statusValue)) {
+    return {
+      ok: false,
+      fieldErrors: { status: "Trạng thái booking không hợp lệ." },
+      formError: "Không thể cập nhật trạng thái booking.",
+    };
+  }
+
+  const status = statusValue as NonNullable<typeof bookings.$inferInsert.status>;
+
+  await db.update(bookings).set({
+    status,
+    updatedAt: new Date(),
+  }).where(eq(bookings.id, id));
+
+  await db.insert(bookingStatusHistory).values({
+    bookingId: id,
+    status,
+    note: "Admin cập nhật trạng thái từ danh sách booking.",
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/bookings");
+  revalidatePath("/calendar");
+  return { ok: true };
+}
+
 function logBookingAdmin(label: string, data: Record<string, unknown>) {
   console.log(`[booking-admin] ${label}`, data);
 }

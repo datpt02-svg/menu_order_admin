@@ -15,6 +15,20 @@ type BookingAttentionSortable = Pick<BookingRow, "bookingDate" | "bookingTime"> 
   depositReviewedAt?: Date | string | null;
 };
 
+type BookingSortable = Pick<BookingRow, "code" | "customerName" | "guestCount" | "bookingDate" | "bookingTime" | "zoneName" | "tableCode"> & {
+  status: string;
+  depositReviewStatus?: BookingRow["depositReviewStatus"];
+  depositReviewedAt?: Date | string | null;
+};
+
+export type BookingSortKey = "attention" | "code" | "customerName" | "guestCount" | "bookingDateTime" | "zoneTable" | "status" | "depositReviewStatus";
+export type BookingSortDirection = "asc" | "desc";
+
+export type BookingSortState = {
+  key: BookingSortKey;
+  direction: BookingSortDirection;
+};
+
 export function applyBookingFilters<T extends BookingFilterable>(bookingList: T[], zoneList: Pick<ZoneRow, "slug" | "name">[], filters: BookingFilterInput) {
   const normalizedKeyword = filters.keyword?.trim().toLowerCase() ?? "";
   const normalizedPhoneKeyword = filters.keyword?.trim() ?? "";
@@ -49,11 +63,66 @@ export function sortBookingsForAttention<T extends BookingAttentionSortable>(boo
   });
 }
 
+export function sortBookings<T extends BookingSortable>(bookingList: T[], sortState: BookingSortState) {
+  if (sortState.key === "attention") {
+    const sorted = sortBookingsForAttention(bookingList);
+    return sortState.direction === "asc" ? sorted : [...sorted].reverse();
+  }
+
+  const direction = sortState.direction === "asc" ? 1 : -1;
+
+  return [...bookingList].sort((left, right) => {
+    if (sortState.key === "code") {
+      return left.code.localeCompare(right.code, "vi", { numeric: true }) * direction;
+    }
+
+    if (sortState.key === "customerName") {
+      return left.customerName.localeCompare(right.customerName, "vi") * direction;
+    }
+
+    if (sortState.key === "guestCount") {
+      return (left.guestCount - right.guestCount) * direction;
+    }
+
+    if (sortState.key === "bookingDateTime") {
+      return (getBookingDateTimeTimestamp(left) - getBookingDateTimeTimestamp(right)) * direction;
+    }
+
+    if (sortState.key === "zoneTable") {
+      return getZoneTableSortValue(left).localeCompare(getZoneTableSortValue(right), "vi", { numeric: true }) * direction;
+    }
+
+    if (sortState.key === "status") {
+      return (getBookingStatusSortPriority(left.status) - getBookingStatusSortPriority(right.status)) * direction;
+    }
+
+    return (getBookingSortPriority(left.depositReviewStatus) - getBookingSortPriority(right.depositReviewStatus)) * direction;
+  });
+}
+
 function getBookingSortPriority(status?: BookingRow["depositReviewStatus"]) {
   if (status === "submitted") return 0;
   if (status === "approved") return 1;
   if (status === "rejected") return 2;
   return 3;
+}
+
+function getBookingStatusSortPriority(status: string) {
+  if (status === "pending") return 0;
+  if (status === "confirmed") return 1;
+  if (status === "seated") return 2;
+  if (status === "completed") return 3;
+  if (status === "cancelled") return 4;
+  return 5;
+}
+
+function getBookingDateTimeTimestamp(booking: Pick<BookingRow, "bookingDate" | "bookingTime">) {
+  const bookingAt = new Date(`${booking.bookingDate}T${booking.bookingTime}`).getTime();
+  return Number.isNaN(bookingAt) ? 0 : bookingAt;
+}
+
+function getZoneTableSortValue(booking: Pick<BookingRow, "zoneName" | "tableCode">) {
+  return `${getBookingZoneFallback(booking.zoneName)} ${getBookingTableFallback(booking.tableCode)}`;
 }
 
 function getBookingActivityTimestamp(booking: BookingAttentionSortable) {
@@ -62,8 +131,7 @@ function getBookingActivityTimestamp(booking: BookingAttentionSortable) {
     if (!Number.isNaN(reviewedAt)) return reviewedAt;
   }
 
-  const bookingAt = new Date(`${booking.bookingDate}T${booking.bookingTime}`).getTime();
-  return Number.isNaN(bookingAt) ? 0 : bookingAt;
+  return getBookingDateTimeTimestamp(booking);
 }
 
 export function getBookingStatusLabel(status: BookingRow["status"]) {
@@ -72,10 +140,10 @@ export function getBookingStatusLabel(status: BookingRow["status"]) {
   if (status === "seated") return "Đã check-in";
   if (status === "completed") return "Hoàn thành";
   if (status === "cancelled") return "Đã huỷ";
-  return "No-show";
+  return "Không đến";
 }
 
-export function getDepositReviewStatusLabel(status: BookingRow["depositReviewStatus"]) {
+export function getDepositReviewStatusLabel(status?: BookingRow["depositReviewStatus"] | null) {
   if (status === "submitted") return "Chờ duyệt bill";
   if (status === "approved") return "Bill hợp lệ";
   if (status === "rejected") return "Bill bị từ chối";

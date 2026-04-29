@@ -2,13 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import { Download, Edit, Plus, Save, AlertTriangle, CheckCircle2, XCircle, Search, Calendar, Users, ReceiptText } from "lucide-react";
+import { Check, Download, Edit, Plus, Save, AlertTriangle, CheckCircle2, XCircle, Search, Calendar, Users, ReceiptText, ArrowUpDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { applyBookingFilters, sortBookingsForAttention } from "@/lib/bookings";
+import {
+  applyBookingFilters,
+  getBookingStatusLabel,
+  getBookingTableFallback,
+  getBookingZoneFallback,
+  getDepositReviewStatusLabel,
+  sortBookings,
+  type BookingSortKey,
+  type BookingSortState,
+} from "@/lib/bookings";
 import { cn } from "@/lib/utils";
 
-import { deleteBookingAction, reviewBookingDepositAction, saveBookingAction } from "@/app/(admin)/actions";
+import { deleteBookingAction, reviewBookingDepositAction, saveBookingAction, updateBookingStatusAction } from "@/app/(admin)/actions";
 import { ClearHighlightQuery } from "@/components/admin/clear-highlight-query";
 import { RealtimeSync } from "@/components/admin/realtime-sync";
 import { SectionHeading } from "@/components/admin/section-heading";
@@ -32,7 +41,7 @@ type BookingItem = {
   status: string;
   depositSlipPath?: string | null;
   depositSlipUrl?: string | null;
-  depositReviewStatus?: DepositReviewStatus;
+  depositReviewStatus?: string | null;
   depositReviewedAt?: Date | string | null;
   depositReviewNote?: string | null;
   tableCode?: string | null;
@@ -60,18 +69,42 @@ type ActionValidationResult = {
   formError?: string;
 };
 
-function getDepositTone(status?: BookingItem["depositReviewStatus"]) {
-  if (status === "submitted") return "warning" as const;
-  if (status === "approved") return "success" as const;
-  if (status === "rejected") return "danger" as const;
+const bookingStatusOptions: Array<{ value: BookingStatus; label: string }> = [
+  { value: "pending", label: getBookingStatusLabel("pending") },
+  { value: "confirmed", label: getBookingStatusLabel("confirmed") },
+  { value: "seated", label: getBookingStatusLabel("seated") },
+  { value: "completed", label: getBookingStatusLabel("completed") },
+  { value: "cancelled", label: getBookingStatusLabel("cancelled") },
+  { value: "no_show", label: getBookingStatusLabel("no_show") },
+];
+
+function isBookingStatus(value: string): value is BookingStatus {
+  return ["pending", "confirmed", "seated", "completed", "cancelled", "no_show"].includes(value);
+}
+
+function getBookingStatusValue(value: string): BookingStatus {
+  return isBookingStatus(value) ? value : "pending";
+}
+
+function getBookingStatusText(value: string) {
+  return getBookingStatusLabel(getBookingStatusValue(value));
+}
+
+function getDepositStatusValue(value?: string | null): DepositReviewStatus | undefined {
+  if (value === "submitted" || value === "approved" || value === "rejected" || value === "not_submitted") return value;
+  return undefined;
+}
+
+function getDepositTone(status?: string | null) {
+  const normalized = getDepositStatusValue(status);
+  if (normalized === "submitted") return "warning" as const;
+  if (normalized === "approved") return "success" as const;
+  if (normalized === "rejected") return "danger" as const;
   return "default" as const;
 }
 
-function getDepositLabel(status?: BookingItem["depositReviewStatus"]) {
-  if (status === "submitted") return "Chờ duyệt bill";
-  if (status === "approved") return "Bill hợp lệ";
-  if (status === "rejected") return "Bill bị từ chối";
-  return "Chưa gửi bill";
+function getDepositLabel(status?: string | null) {
+  return getDepositReviewStatusLabel(getDepositStatusValue(status));
 }
 
 function formatDepositReviewTime(value?: Date | string | null) {
@@ -86,18 +119,7 @@ function formatDepositReviewTime(value?: Date | string | null) {
   });
 }
 
-function buildDepositStatusText(booking: BookingItem) {
-  const base = getDepositLabel(booking.depositReviewStatus);
-  if (booking.depositReviewStatus === "rejected" && booking.depositReviewNote) {
-    return `${base}: ${booking.depositReviewNote}`;
-  }
-  return base;
-}
-
-function getBookingHighlightTone(booking: BookingItem) {
-  if (booking.depositReviewStatus === "submitted") {
-    return "bg-[rgba(185,140,42,0.14)] shadow-[inset_0_0_0_1px_rgba(185,140,42,0.32)]";
-  }
+function getBookingHighlightTone() {
   return "bg-[rgba(185,140,42,0.14)] shadow-[inset_0_0_0_1px_rgba(185,140,42,0.32)]";
 }
 
@@ -117,28 +139,110 @@ function getPublicImageUrl(path?: string | null) {
   return path;
 }
 
-function shouldOpenDepositReview(booking?: BookingItem) {
-  return booking?.depositReviewStatus === "submitted" && Boolean(booking.depositSlipPath || booking.depositSlipUrl);
+function canOpenDepositBill(booking?: BookingItem | null) {
+  return Boolean(booking?.depositSlipPath || booking?.depositSlipUrl);
+}
+
+function isDepositReviewPending(booking?: BookingItem | null) {
+  return getDepositStatusValue(booking?.depositReviewStatus) === "submitted";
 }
 
 function getPendingDepositCount(bookings: BookingItem[]) {
-  return bookings.filter((booking) => booking.depositReviewStatus === "submitted").length;
+  return bookings.filter((booking) => getDepositStatusValue(booking.depositReviewStatus) === "submitted").length;
 }
 
 function getRejectedDepositCount(bookings: BookingItem[]) {
-  return bookings.filter((booking) => booking.depositReviewStatus === "rejected").length;
+  return bookings.filter((booking) => getDepositStatusValue(booking.depositReviewStatus) === "rejected").length;
 }
 
 function getApprovedDepositCount(bookings: BookingItem[]) {
-  return bookings.filter((booking) => booking.depositReviewStatus === "approved").length;
+  return bookings.filter((booking) => getDepositStatusValue(booking.depositReviewStatus) === "approved").length;
 }
 
-function getBookingTone(status: string) {
-  if (status === "pending") return "warning" as const;
-  if (status === "seated") return "info" as const;
-  if (status === "confirmed") return "success" as const;
-  if (status === "cancelled") return "danger" as const;
-  return "success" as const;
+const bookingStatusToneMap: Record<BookingStatus, "warning" | "success" | "info" | "danger" | "default"> = {
+  pending: "warning",
+  confirmed: "success",
+  seated: "info",
+  completed: "success",
+  cancelled: "danger",
+  no_show: "danger",
+};
+
+function BookingStatusDropdown({
+  booking,
+  isStatusPending,
+  onUpdate,
+}: {
+  booking: BookingItem;
+  isStatusPending: boolean;
+  onUpdate: (id: number, status: BookingStatus) => void;
+}) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const details = detailsRef.current;
+      if (!details?.open) return;
+      if (event.target instanceof Node && details.contains(event.target)) return;
+      details.open = false;
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  const currentStatus = getBookingStatusValue(booking.status);
+
+  return (
+    <details ref={detailsRef} className="group relative shrink-0">
+      <summary className="list-none marker:hidden [&::-webkit-details-marker]:hidden">
+        <Badge
+          tone={bookingStatusToneMap[currentStatus]}
+          className={cn(
+            "cursor-pointer transition-opacity duration-200 hover:opacity-90 whitespace-nowrap",
+            isStatusPending && "pointer-events-none opacity-60",
+          )}
+        >
+          {getBookingStatusLabel(currentStatus)}
+        </Badge>
+      </summary>
+      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden min-w-[180px] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur group-open:block">
+        <div className="space-y-1">
+          {bookingStatusOptions.map((option) => {
+            const isActive = option.value === currentStatus;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
+                  isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
+                )}
+                disabled={isStatusPending || isActive}
+                onClick={() => {
+                  detailsRef.current?.removeAttribute("open");
+                  onUpdate(booking.id, option.value);
+                }}
+              >
+                <span>{option.label}</span>
+                {isActive ? <Check className="h-4 w-4" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function getSortSummaryLabel(sortState: BookingSortState) {
+  if (sortState.key === "attention") return "Ưu tiên xử lý";
+  if (sortState.key === "code") return "Mã";
+  if (sortState.key === "customerName") return "Khách";
+  if (sortState.key === "guestCount") return "Số khách";
+  if (sortState.key === "zoneTable") return "Khu vực / Bàn";
+  if (sortState.key === "status") return "Trạng thái";
+  if (sortState.key === "depositReviewStatus") return "Bill cọc";
+  return "Ngày giờ";
 }
 
 export function BookingContent({ initialData, highlightedBookingId }: BookingContentProps) {
@@ -150,20 +254,39 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
   const [zoneFilter, setZoneFilter] = useState("all");
-  const { bookings, zones } = initialData;
+  const [sortState, setSortState] = useState<BookingSortState>({ key: "bookingDateTime", direction: "desc" });
+  const [statusTargetId, setStatusTargetId] = useState<number | null>(null);
+  const [statusFormError, setStatusFormError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
+  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
+
+  const bookings = initialData.bookings;
+  const zones = initialData.zones;
+
   const filteredBookings = useMemo(() => applyBookingFilters(bookings, zones, {
     keyword: keywordFilter,
     date: dateFilter,
     status: statusFilter,
     zone: zoneFilter,
   }), [bookings, dateFilter, keywordFilter, statusFilter, zoneFilter, zones]);
-  const orderedBookings = useMemo(() => sortBookingsForAttention(filteredBookings), [filteredBookings]);
+
+  const orderedBookings = useMemo(() => {
+    return sortBookings(filteredBookings.map((booking) => ({
+      ...booking,
+      depositReviewStatus: getDepositStatusValue(booking.depositReviewStatus),
+    })), sortState) as BookingItem[];
+  }, [filteredBookings, sortState]);
+
   const pendingDepositCount = useMemo(() => getPendingDepositCount(bookings), [bookings]);
   const approvedDepositCount = useMemo(() => getApprovedDepositCount(bookings), [bookings]);
   const rejectedDepositCount = useMemo(() => getRejectedDepositCount(bookings), [bookings]);
   const requestedDepositReviewBookingId = getDepositNotificationBookingId(searchParams);
   const shouldOpenDepositFromQuery = getReviewFromSearchParams(searchParams);
-  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
 
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams();
@@ -176,36 +299,36 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   }, [dateFilter, keywordFilter, statusFilter, zoneFilter]);
 
   useEffect(() => {
-    setActiveHighlightId(highlightedBookingId);
+    if (typeof highlightedBookingId !== "number") return;
+    const timer = window.setTimeout(() => setActiveHighlightId(highlightedBookingId), 0);
+    return () => window.clearTimeout(timer);
   }, [highlightedBookingId]);
 
   useEffect(() => {
     if (!activeHighlightId) return;
-
     const targetRow = rowRefs.current[activeHighlightId];
-    if (targetRow) {
-      targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-
-    const timer = window.setTimeout(() => {
-      setActiveHighlightId(undefined);
-    }, 4000);
-
+    if (targetRow) targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timer = window.setTimeout(() => setActiveHighlightId(undefined), 4000);
     return () => window.clearTimeout(timer);
   }, [activeHighlightId]);
+
+  useEffect(() => {
+    if (!shouldOpenDepositFromQuery || !requestedDepositReviewBookingId) return;
+    const booking = bookings.find((item) => item.id === requestedDepositReviewBookingId);
+    if (!canOpenDepositBill(booking)) return;
+    const timer = window.setTimeout(() => {
+      setFieldErrors({});
+      setFormError(null);
+      setActiveHighlightId(requestedDepositReviewBookingId);
+      setSelectedBooking(booking ?? null);
+      setIsModalOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [bookings, requestedDepositReviewBookingId, shouldOpenDepositFromQuery]);
 
   const assignRowRef = (id: number) => (node: HTMLTableRowElement | null) => {
     rowRefs.current[id] = node;
   };
-
-  const isHighlightedBooking = (id: number) => activeHighlightId === id;
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
-  const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
 
   const clearFieldError = (field: string) => {
     if (!fieldErrors[field] && !formError) return undefined;
@@ -222,6 +345,24 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
 
   const hasError = (field: string) => Boolean(fieldErrors[field]);
 
+  const handleSort = (key: BookingSortKey) => {
+    setSortState((current) => {
+      if (current.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+      return { key, direction: key === "bookingDateTime" ? "desc" : "asc" };
+    });
+  };
+
+  const renderSortHeader = (label: string, key: BookingSortKey, className?: string) => (
+    <button
+      type="button"
+      className={cn("inline-flex items-center gap-1 text-left font-semibold text-[var(--muted)] transition hover:text-[var(--forest-dark)]", className)}
+      onClick={() => handleSort(key)}
+    >
+      <span>{label}</span>
+      <ArrowUpDown className={cn("h-3.5 w-3.5", sortState.key === key ? "text-[var(--forest)]" : "opacity-60")} />
+    </button>
+  );
+
   const handleBookingSave = async (formData: FormData) => {
     setFieldErrors({});
     setFormError(null);
@@ -234,7 +375,6 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
           setFormError(result.formError || null);
           return;
         }
-
         setIsModalOpen(false);
         router.refresh();
       } catch {
@@ -243,46 +383,27 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
     });
   };
 
-  useEffect(() => {
-    if (!isModalOpen) return;
-    setFieldErrors({});
-    setFormError(null);
-  }, [isModalOpen, selectedBooking]);
+  const updateBookingStatus = async (id: number, status: BookingStatus) => {
+    setStatusFormError(null);
+    setStatusTargetId(id);
 
-  useEffect(() => {
-    if (!shouldOpenDepositFromQuery || !requestedDepositReviewBookingId) return;
-    const booking = bookings.find((item) => item.id === requestedDepositReviewBookingId);
-    if (!shouldOpenDepositReview(booking)) return;
-    setActiveHighlightId(requestedDepositReviewBookingId);
-    setSelectedBooking(booking ?? null);
-    setIsModalOpen(true);
-  }, [bookings, requestedDepositReviewBookingId, shouldOpenDepositFromQuery]);
-
-  const handleStatusUpdate = async (id: number, status: string) => {
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append("id", String(id));
-      formData.append("status", status);
-
-      const booking = bookings.find((b) => b.id === id);
-      if (booking) {
-        formData.append("code", booking.code);
-        formData.append("customerName", booking.customerName);
-        formData.append("customerPhone", booking.customerPhone);
-        formData.append("bookingDate", booking.bookingDate);
-        formData.append("bookingTime", booking.bookingTime);
-        formData.append("guestCount", String(booking.guestCount));
-        formData.append("zoneSlug", zones.find((z) => z.name === booking.zoneName)?.slug || "all");
-        formData.append("tableCode", booking.tableCode || "");
-        formData.append("note", booking.note || "");
+      try {
+        const formData = new FormData();
+        formData.append("id", String(id));
+        formData.append("status", status);
+        const result = (await updateBookingStatusAction(formData)) as ActionValidationResult;
+        if (!result.ok) {
+          setStatusFormError(result.formError || "Không thể cập nhật trạng thái booking.");
+          setStatusTargetId(null);
+          return;
+        }
+        setStatusTargetId(null);
+        router.refresh();
+      } catch {
+        setStatusFormError("Không thể cập nhật trạng thái booking lúc này. Vui lòng thử lại.");
+        setStatusTargetId(null);
       }
-
-      const result = await saveBookingAction(formData);
-      if (!result.ok) {
-        return;
-      }
-      setIsCancelConfirmOpen(false);
-      router.refresh();
     });
   };
 
@@ -293,12 +414,23 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   };
 
   const handleEdit = (booking: BookingItem) => {
+    setFieldErrors({});
+    setFormError(null);
     setSelectedBooking(booking);
     setIsModalOpen(true);
   };
 
   const handleAdd = () => {
+    setFieldErrors({});
+    setFormError(null);
     setSelectedBooking(null);
+    setIsModalOpen(true);
+  };
+
+  const openDepositBill = (booking: BookingItem) => {
+    setFieldErrors({});
+    setFormError(null);
+    setSelectedBooking(booking);
     setIsModalOpen(true);
   };
 
@@ -376,12 +508,11 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 <FieldLabel>Trạng thái</FieldLabel>
                 <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as BookingStatus | "all")}>
                   <option value="all">Tất cả</option>
-                  <option value="pending">Chờ xác nhận</option>
-                  <option value="confirmed">Đã xác nhận</option>
-                  <option value="seated">Đã check-in</option>
-                  <option value="completed">Hoàn thành</option>
-                  <option value="cancelled">Đã huỷ</option>
+                  {bookingStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </Select>
+                <div className="mt-2 text-xs text-[var(--muted)]">Đang sắp xếp theo {getSortSummaryLabel(sortState)} · {sortState.direction === "asc" ? "tăng dần" : "giảm dần"}</div>
               </div>
               <div>
                 <FieldLabel>Khu vực</FieldLabel>
@@ -415,106 +546,107 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
               }
             />
             <div className="overflow-x-auto admin-scrollbar">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full table-fixed text-sm">
                 <thead>
                   <tr className="border-b border-[color:var(--line)] text-left text-[var(--muted)]">
-                    <th className="pb-3 font-semibold">Mã</th>
-                    <th className="pb-3 font-semibold">Khách</th>
-                    <th className="pb-3 font-semibold">Số khách</th>
-                    <th className="pb-3 font-semibold">Ngày giờ</th>
-                    <th className="pb-3 font-semibold">Khu vực / Bàn</th>
-                    <th className="pb-3 font-semibold">Trạng thái</th>
-                    <th className="pb-3 font-semibold text-right">Thao tác</th>
+                    <th className="w-[9rem] pb-3 pr-4">{renderSortHeader("Mã", "code")}</th>
+                    <th className="w-[14rem] pb-3 pr-4">{renderSortHeader("Khách", "customerName")}</th>
+                    <th className="w-[8rem] pb-3 pr-4">{renderSortHeader("Số khách", "guestCount")}</th>
+                    <th className="w-[11rem] pb-3 pr-4">{renderSortHeader("Ngày giờ", "bookingDateTime")}</th>
+                    <th className="w-[15rem] pb-3 pr-4">{renderSortHeader("Khu vực / Bàn", "zoneTable")}</th>
+                    <th className="w-[12rem] pb-3 pr-4">{renderSortHeader("Trạng thái", "status")}</th>
+                    <th className="w-[10rem] pb-3 text-right font-semibold text-[var(--muted)]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orderedBookings.map((booking) => (
-                    <tr
-                      key={booking.id}
-                      ref={assignRowRef(booking.id)}
-                      className={cn(
-                        "border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40",
-                        isHighlightedBooking(booking.id) && getBookingHighlightTone(booking),
-                      )}
-                    >
-                      <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)]">{booking.code}</td>
-                      <td className="py-4 pr-4">
-                        <div className="font-semibold text-[var(--forest-dark)]">{booking.customerName}</div>
-                        <div className="text-[var(--muted)]">{booking.customerPhone}</div>
-                      </td>
-                      <td className="py-4 pr-4">
-                        <div className="flex items-center gap-1.5 font-semibold text-[var(--forest)]">
-                          <Users className="h-3.5 w-3.5" />
-                          {booking.guestCount}
-                        </div>
-                      </td>
-                      <td className="py-4 pr-4 text-[var(--muted)]">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {booking.bookingDate}
-                        </div>
-                        <div className="ml-5">{booking.bookingTime}</div>
-                      </td>
-                      <td className="py-4 pr-4 text-[var(--muted)]">
-                        <div>
-                          {booking.zoneName ?? "Chưa gán khu"} / <span className="font-semibold text-[var(--forest-dark)]">{booking.tableCode ?? "Chưa gán bàn"}</span>
-                        </div>
-                        <div className="mt-2">
-                          <Badge tone={getDepositTone(booking.depositReviewStatus)}>{getDepositLabel(booking.depositReviewStatus)}</Badge>
-                        </div>
-                        {(booking.depositReviewStatus === "rejected" || booking.depositReviewStatus === "approved") && formatDepositReviewTime(booking.depositReviewedAt) ? (
-                          <div className="mt-2 text-xs text-[var(--muted)]">{formatDepositReviewTime(booking.depositReviewedAt)}</div>
-                        ) : null}
-                        {booking.depositReviewStatus === "rejected" && booking.depositReviewNote ? (
-                          <div className="mt-2 text-xs text-[#8a3527]">{booking.depositReviewNote}</div>
-                        ) : null}
-                      </td>
-                      <td className="py-4">
-                        <div className="flex flex-col gap-2">
-                          <Badge tone={getBookingTone(booking.status)}>{booking.status}</Badge>
-                          <div className="text-xs text-[var(--muted)]">{buildDepositStatusText(booking)}</div>
-                        </div>
-                      </td>
-                      <td className="py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          {shouldOpenDepositReview(booking) ? (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-[#8c6d1f] hover:bg-[rgba(185,140,42,0.1)]"
-                              onClick={() => {
-                                setSelectedBooking(booking);
-                                setIsModalOpen(true);
-                              }}
-                            >
-                              <ReceiptText className="h-4 w-4" />
-                            </Button>
-                          ) : null}
-                          {booking.status === "pending" && booking.depositReviewStatus !== "submitted" && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-green-600 hover:bg-green-50"
-                              onClick={() => handleStatusUpdate(booking.id, "confirmed")}
-                            >
-                              <CheckCircle2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon-sm" onClick={() => handleEdit(booking)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => confirmCancel(booking.id)}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </Button>
+                  {statusFormError ? (
+                    <tr>
+                      <td colSpan={7} className="py-3">
+                        <div className="rounded-[16px] border border-[rgba(159,75,62,0.18)] bg-[rgba(159,75,62,0.08)] px-4 py-3 text-sm text-[#8a3527]">
+                          {statusFormError}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : null}
+                  {orderedBookings.map((booking) => {
+                    const reviewTime = formatDepositReviewTime(booking.depositReviewedAt);
+                    const isStatusPending = isPending && statusTargetId === booking.id;
+                    return (
+                      <tr
+                        key={booking.id}
+                        ref={assignRowRef(booking.id)}
+                        className={cn(
+                          "border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40",
+                          activeHighlightId === booking.id && getBookingHighlightTone(),
+                        )}
+                      >
+                        <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)]">{booking.code}</td>
+                        <td className="py-4 pr-4 align-top">
+                          <div className="break-words font-semibold text-[var(--forest-dark)]">{booking.customerName}</div>
+                          <div className="break-all text-[var(--muted)]">{booking.customerPhone}</div>
+                        </td>
+                        <td className="py-4 pr-4 align-top">
+                          <div className="flex items-center gap-1.5 font-semibold text-[var(--forest)]">
+                            <Users className="h-3.5 w-3.5" />
+                            {booking.guestCount}
+                          </div>
+                        </td>
+                        <td className="py-4 pr-4 align-top text-[var(--muted)]">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {booking.bookingDate}
+                          </div>
+                          <div className="ml-5 whitespace-nowrap">{booking.bookingTime}</div>
+                        </td>
+                        <td className="py-4 pr-4 align-top text-[var(--muted)]">
+                          <div className="break-words">
+                            {getBookingZoneFallback(booking.zoneName)} / <span className="font-semibold text-[var(--forest-dark)]">{getBookingTableFallback(booking.tableCode)}</span>
+                          </div>
+                          <div className="mt-2">
+                            <Badge tone={getDepositTone(booking.depositReviewStatus)} className="whitespace-nowrap">{getDepositLabel(booking.depositReviewStatus)}</Badge>
+                          </div>
+                          {(getDepositStatusValue(booking.depositReviewStatus) === "rejected" || getDepositStatusValue(booking.depositReviewStatus) === "approved") && reviewTime ? (
+                            <div className="mt-2 text-xs text-[var(--muted)]">{reviewTime}</div>
+                          ) : null}
+                          {getDepositStatusValue(booking.depositReviewStatus) === "rejected" && booking.depositReviewNote ? (
+                            <div className="mt-2 break-words text-xs text-[#8a3527]">{booking.depositReviewNote}</div>
+                          ) : null}
+                        </td>
+                        <td className="py-4 pr-4 align-top">
+                          <BookingStatusDropdown
+                            booking={booking}
+                            isStatusPending={isStatusPending}
+                            onUpdate={updateBookingStatus}
+                          />
+                        </td>
+                        <td className="py-4 text-right align-top">
+                          <div className="flex min-w-[8.5rem] justify-end gap-2">
+                            {canOpenDepositBill(booking) ? (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-[#8c6d1f] hover:bg-[rgba(185,140,42,0.1)]"
+                                onClick={() => openDepositBill(booking)}
+                              >
+                                <ReceiptText className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            <Button variant="ghost" size="icon-sm" onClick={() => handleEdit(booking)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => confirmCancel(booking.id)}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -524,10 +656,12 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
         <Modal
           isOpen={isModalOpen}
           onClose={handleBookingModalClose}
-          title={selectedBooking && shouldOpenDepositReview(selectedBooking) ? "Xác nhận bill cọc" : selectedBooking ? "Chi tiết Booking" : "Thêm Booking mới"}
-          className={selectedBooking && shouldOpenDepositReview(selectedBooking) ? "max-w-4xl" : undefined}
+          title={selectedBooking && canOpenDepositBill(selectedBooking)
+            ? (isDepositReviewPending(selectedBooking) ? "Xác nhận bill cọc" : "Xem bill cọc")
+            : selectedBooking ? "Chi tiết Booking" : "Thêm Booking mới"}
+          className={selectedBooking && canOpenDepositBill(selectedBooking) ? "max-w-4xl" : undefined}
         >
-          {selectedBooking && shouldOpenDepositReview(selectedBooking) ? (
+          {selectedBooking && canOpenDepositBill(selectedBooking) ? (
             <div className="space-y-6">
               {formError ? (
                 <div className="rounded-[16px] border border-[rgba(159,75,62,0.18)] bg-[rgba(159,75,62,0.08)] px-4 py-3 text-sm text-[#8a3527]">
@@ -552,55 +686,61 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                     )}
                   </div>
 
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant="danger"
-                      className="min-w-0 flex-1 whitespace-nowrap"
-                      disabled={isPending}
-                      onClick={() => {
-                        startTransition(async () => {
-                          const formData = new FormData();
-                          formData.append("id", String(selectedBooking.id));
-                          formData.append("decision", "rejected");
-                          const result = (await reviewBookingDepositAction(formData)) as ActionValidationResult;
-                          if (!result.ok) {
-                            setFieldErrors(result.fieldErrors || {});
-                            setFormError(result.formError || null);
-                            return;
-                          }
-                          setIsModalOpen(false);
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Không xác nhận
-                    </Button>
-                    <Button
-                      type="button"
-                      className="min-w-0 flex-1 whitespace-nowrap"
-                      disabled={isPending}
-                      onClick={() => {
-                        startTransition(async () => {
-                          const formData = new FormData();
-                          formData.append("id", String(selectedBooking.id));
-                          formData.append("decision", "approved");
-                          const result = (await reviewBookingDepositAction(formData)) as ActionValidationResult;
-                          if (!result.ok) {
-                            setFieldErrors(result.fieldErrors || {});
-                            setFormError(result.formError || null);
-                            return;
-                          }
-                          setIsModalOpen(false);
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Xác nhận bill cọc
-                    </Button>
-                  </div>
+                  {isDepositReviewPending(selectedBooking) ? (
+                    <div className="flex gap-3">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        className="min-w-0 flex-1 whitespace-nowrap"
+                        disabled={isPending}
+                        onClick={() => {
+                          startTransition(async () => {
+                            const formData = new FormData();
+                            formData.append("id", String(selectedBooking.id));
+                            formData.append("decision", "rejected");
+                            const result = (await reviewBookingDepositAction(formData)) as ActionValidationResult;
+                            if (!result.ok) {
+                              setFieldErrors(result.fieldErrors || {});
+                              setFormError(result.formError || null);
+                              return;
+                            }
+                            setIsModalOpen(false);
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Không xác nhận
+                      </Button>
+                      <Button
+                        type="button"
+                        className="min-w-0 flex-1 whitespace-nowrap"
+                        disabled={isPending}
+                        onClick={() => {
+                          startTransition(async () => {
+                            const formData = new FormData();
+                            formData.append("id", String(selectedBooking.id));
+                            formData.append("decision", "approved");
+                            const result = (await reviewBookingDepositAction(formData)) as ActionValidationResult;
+                            if (!result.ok) {
+                              setFieldErrors(result.fieldErrors || {});
+                              setFormError(result.formError || null);
+                              return;
+                            }
+                            setIsModalOpen(false);
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Xác nhận bill cọc
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="rounded-[18px] border border-[color:var(--line)] bg-white/70 px-4 py-3 text-sm text-[var(--muted)]">
+                      Bill cọc này đã được xử lý. Dùng màn hình này để xem lại ảnh bill và trạng thái duyệt.
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -618,7 +758,14 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                       <div>SĐT: {selectedBooking.customerPhone}</div>
                       <div>Lịch: {selectedBooking.bookingDate} · {selectedBooking.bookingTime}</div>
                       <div>Số khách: {selectedBooking.guestCount}</div>
-                      <div>Vị trí: {selectedBooking.zoneName ?? "Chưa gán khu"} / {selectedBooking.tableCode ?? "Chưa gán bàn"}</div>
+                      <div>Vị trí: {getBookingZoneFallback(selectedBooking.zoneName)} / {getBookingTableFallback(selectedBooking.tableCode)}</div>
+                      <div>Trạng thái booking: {getBookingStatusText(selectedBooking.status)}</div>
+                      {formatDepositReviewTime(selectedBooking.depositReviewedAt) ? (
+                        <div>Duyệt lúc: {formatDepositReviewTime(selectedBooking.depositReviewedAt)}</div>
+                      ) : null}
+                      {getDepositStatusValue(selectedBooking.depositReviewStatus) === "rejected" && selectedBooking.depositReviewNote ? (
+                        <div className="text-[#8a3527]">Lý do từ chối: {selectedBooking.depositReviewNote}</div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -629,11 +776,11 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
               {selectedBooking && <input type="hidden" name="id" value={selectedBooking.id} />}
 
               <div className="grid gap-4 md:grid-cols-2">
-                {formError && (
+                {formError ? (
                   <div className="md:col-span-2 rounded-[16px] border border-[rgba(159,75,62,0.18)] bg-[rgba(159,75,62,0.08)] px-4 py-3 text-sm text-[#8a3527]">
                     {formError}
                   </div>
-                )}
+                ) : null}
                 <div>
                   <FieldLabel>Mã booking</FieldLabel>
                   <Input name="code" defaultValue={selectedBooking?.code} placeholder="Để trống để tự tạo" onChange={clearFieldError("code")} invalid={hasError("code")} />
@@ -641,13 +788,10 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 </div>
                 <div>
                   <FieldLabel>Trạng thái</FieldLabel>
-                  <Select name="status" defaultValue={selectedBooking?.status || "pending"} onChange={clearFieldError("status")} invalid={hasError("status")}>
-                    <option value="pending">Chờ xác nhận</option>
-                    <option value="confirmed">Đã xác nhận</option>
-                    <option value="seated">Đã check-in</option>
-                    <option value="completed">Hoàn thành</option>
-                    <option value="cancelled">Đã huỷ</option>
-                    <option value="no_show">No-show</option>
+                  <Select name="status" defaultValue={selectedBooking ? getBookingStatusValue(selectedBooking.status) : "pending"} onChange={clearFieldError("status")} invalid={hasError("status")}>
+                    {bookingStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </Select>
                   <FieldError>{fieldErrors.status}</FieldError>
                 </div>
@@ -729,7 +873,6 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
               <form
                 action={async () => {
                   if (!cancelTargetId) return;
-
                   startTransition(async () => {
                     const formData = new FormData();
                     formData.append("id", String(cancelTargetId));
@@ -740,11 +883,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                   });
                 }}
               >
-                <Button
-                  type="submit"
-                  variant="danger"
-                  disabled={isPending || !cancelTargetId}
-                >
+                <Button type="submit" variant="danger" disabled={isPending || !cancelTargetId}>
                   Xác nhận hủy
                 </Button>
               </form>
