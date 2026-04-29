@@ -405,7 +405,6 @@ const waiterCopy = {
     intro: "Anh/chị cho Sam biết mình đang ngồi ở đâu và cần hỗ trợ gì nhé ạ.",
     locationLabel: "Bàn / khu vực",
     locationPlaceholder: "Ví dụ: Bàn 05, khu BBQ, chòi ven hồ...",
-    quickLocations: ["Bàn 05", "Khu BBQ đặt đồ ăn", "Bếp của bạn", "Khu Cafe", "Khu thuê bàn ghế"],
     needTitle: "Anh/chị cần hỗ trợ gì?",
     noteLabel: "Ghi chú",
     notePlaceholder: "Ví dụ: cần thêm chén, đang ngồi gần hồ, muốn thanh toán riêng...",
@@ -438,7 +437,6 @@ const waiterCopy = {
     intro: "Tell Sam where you are seated and what support you need.",
     locationLabel: "Table / area",
     locationPlaceholder: "Example: Table 05, BBQ area, lakeside hut...",
-    quickLocations: ["Table 05", "BBQ food area", "Your kitchen", "Cafe area", "BBQ seating rental"],
     needTitle: "What do you need?",
     noteLabel: "Note",
     notePlaceholder: "Example: extra bowls, near the lake, separate payment...",
@@ -471,7 +469,6 @@ const waiterCopy = {
     intro: "请告诉 Sam 您所在的桌号/区域以及需要什么帮助。",
     locationLabel: "桌号 / 区域",
     locationPlaceholder: "例如：05号桌、BBQ区、湖边小屋...",
-    quickLocations: ["05号桌", "BBQ 点餐区", "自助厨房", "咖啡区", "BBQ 桌椅租赁区"],
     needTitle: "您需要什么帮助？",
     noteLabel: "备注",
     notePlaceholder: "例如：需要更多碗、在湖边、想分开付款...",
@@ -504,7 +501,6 @@ const waiterCopy = {
     intro: "현재 앉아 계신 테이블/구역과 필요한 도움을 알려 주세요.",
     locationLabel: "테이블 / 구역",
     locationPlaceholder: "예: 05번 테이블, BBQ 구역, 호수 옆 자리...",
-    quickLocations: ["05번 테이블", "BBQ 주문 구역", "나만의 주방", "카페 구역", "BBQ 좌석 대여 구역"],
     needTitle: "어떤 도움이 필요하신가요?",
     noteLabel: "메모",
     notePlaceholder: "예: 그릇 추가, 호수 근처 자리, 별도 결제 요청...",
@@ -537,7 +533,6 @@ const waiterCopy = {
     intro: "お席/エリアと必要なサポートを Sam にお知らせください。",
     locationLabel: "席 / エリア",
     locationPlaceholder: "例：05番テーブル、BBQエリア、湖畔の小屋...",
-    quickLocations: ["05番テーブル", "BBQ 注文エリア", "自分のキッチン", "カフェエリア", "BBQ 席レンタルエリア"],
     needTitle: "必要なサポートを選んでください",
     noteLabel: "メモ",
     notePlaceholder: "例：お皿を追加、湖の近く、別会計希望...",
@@ -2193,8 +2188,10 @@ const state = {
   bookingHistoryLoading: false,
   waiterStep: "form",
   waiterError: "",
+  waiterZones: [],
   waiterDraft: {
     location: "",
+    zoneSlug: "",
     need: "call-staff",
     note: "",
     groceryItems: [],
@@ -2766,6 +2763,13 @@ async function loadBookingConfig() {
     accountNumber: String(config?.accountNumber || DEFAULT_BOOKING_CONFIG.accountNumber),
     phone: String(config?.phone || DEFAULT_BOOKING_CONFIG.phone),
   };
+}
+
+async function loadWaiterZones() {
+  const response = await fetch(buildApiUrl("/api/zones"));
+  if (!response.ok) throw new Error("waiter-zones-fetch-failed");
+  const result = await response.json();
+  state.waiterZones = Array.isArray(result.zones) ? result.zones : [];
 }
 
 async function uploadBookingReceipt(file) {
@@ -3897,6 +3901,7 @@ async function submitWaiterDraft() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      zoneSlug: state.waiterDraft.zoneSlug || null,
       tableCode: inferTableCodeFromLocation(location),
       need: getWaiterNeedLabel(),
       note: parts.filter(Boolean).join(" • "),
@@ -3917,6 +3922,7 @@ function resetWaiterDraft() {
   state.waiterError = "";
   state.waiterDraft = {
     location: "",
+    zoneSlug: "",
     need: "call-staff",
     note: "",
     groceryItems: [],
@@ -4052,11 +4058,11 @@ function renderWaiterFlow() {
           />
         </div>
         <div class="waiter-quick-grid">
-          ${copy.quickLocations
+          ${state.waiterZones
             .map(
-              (location) => `
-                <button type="button" class="waiter-quick-chip ${state.waiterDraft.location === location ? "is-selected" : ""}" data-waiter-location="${escapeHtml(location)}">
-                  ${location}
+              (zone) => `
+                <button type="button" class="waiter-quick-chip ${state.waiterDraft.zoneSlug === zone.slug ? "is-selected" : ""}" data-waiter-location="${escapeHtml(zone.name)}" data-waiter-zone-slug="${escapeHtml(zone.slug)}">
+                  ${escapeHtml(zone.name)}
                 </button>
               `
             )
@@ -4879,6 +4885,7 @@ document.addEventListener("click", (event) => {
 
   if (waiterLocationButton instanceof HTMLElement) {
     state.waiterDraft.location = waiterLocationButton.dataset.waiterLocation || "";
+    state.waiterDraft.zoneSlug = waiterLocationButton.dataset.waiterZoneSlug || "";
     state.waiterError = "";
     renderWaiterFlow();
   }
@@ -4936,6 +4943,7 @@ document.addEventListener("input", (event) => {
   }
   if (waiterField) {
     state.waiterDraft[waiterField] = target.value;
+    if (waiterField === "location") state.waiterDraft.zoneSlug = "";
     state.waiterError = "";
   }
   if (historyField === "search") {
@@ -5110,6 +5118,9 @@ Promise.all([
   }),
   loadBookingConfig().catch(() => {
     state.bookingConfig = { ...DEFAULT_BOOKING_CONFIG };
+  }),
+  loadWaiterZones().catch(() => {
+    state.waiterZones = [];
   }),
 ]).finally(() => {
   renderApp();
