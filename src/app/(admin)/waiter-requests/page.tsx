@@ -43,10 +43,6 @@ export default async function WaiterRequestsPage({
       description="Board realtime cho nhân viên phục vụ: nhìn nhanh bàn nào cần hỗ trợ, nội dung yêu cầu là gì và đang ở trạng thái nào."
       actions={
         <>
-          <Button variant="outline">
-            <RefreshCcw className="h-4 w-4" />
-            Đồng bộ realtime
-          </Button>
           <Button>
             <BellRing className="h-4 w-4" />
             Bật âm báo

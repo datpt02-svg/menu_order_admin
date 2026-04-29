@@ -416,7 +416,6 @@ const waiterCopy = {
     groceryHint: "Chọn nhanh những món/dụng cụ cần thêm để nhân viên chuẩn bị trước.",
     sendRequest: "Gửi yêu cầu",
     sendAnother: "Gửi yêu cầu mới",
-    resolveDemo: "Sam đã hỗ trợ",
     sentTitle: "Yêu cầu đã gửi",
     sentDesc: "Sam Camping đã nhận yêu cầu. Nhân viên sẽ hỗ trợ theo bàn/khu vực anh/chị cung cấp.",
     resolvedTitle: "Yêu cầu đã xử lý",
@@ -448,7 +447,6 @@ const waiterCopy = {
     groceryHint: "Select items or tools so staff can prepare faster.",
     sendRequest: "Send request",
     sendAnother: "Send new request",
-    resolveDemo: "Staff handled",
     sentTitle: "Request sent",
     sentDesc: "Sam Camping has received your request. Staff will support based on your table/area.",
     resolvedTitle: "Request handled",
@@ -480,7 +478,6 @@ const waiterCopy = {
     groceryHint: "提前选择需要的物品/工具，方便服务员准备。",
     sendRequest: "发送请求",
     sendAnother: "发送新请求",
-    resolveDemo: "员工已处理",
     sentTitle: "请求已发送",
     sentDesc: "Sam Camping 已收到请求。员工会根据您填写的桌号/区域提供支持。",
     resolvedTitle: "请求已处理",
@@ -512,7 +509,6 @@ const waiterCopy = {
     groceryHint: "필요한 물품/도구를 선택하면 직원이 더 빠르게 준비할 수 있습니다.",
     sendRequest: "요청 보내기",
     sendAnother: "새 요청 보내기",
-    resolveDemo: "직원 처리 완료",
     sentTitle: "요청 전송 완료",
     sentDesc: "Sam Camping이 요청을 받았습니다. 입력하신 테이블/구역 기준으로 도와드릴게요.",
     resolvedTitle: "요청 처리 완료",
@@ -544,7 +540,6 @@ const waiterCopy = {
     groceryHint: "必要な品物/道具を選ぶと、スタッフが早く準備できます。",
     sendRequest: "リクエストを送信",
     sendAnother: "新しいリクエストを送信",
-    resolveDemo: "スタッフ対応済み",
     sentTitle: "リクエスト送信済み",
     sentDesc: "Sam Camping がリクエストを受け取りました。入力された席/エリアに合わせて対応します。",
     resolvedTitle: "リクエスト対応済み",
@@ -4026,14 +4021,6 @@ function renderWaiterFlow() {
             <i class="fa-regular fa-paper-plane" aria-hidden="true"></i>
             <span>${copy.sendAnother}</span>
           </button>
-          ${
-            isResolved
-              ? ""
-              : `<button type="button" class="booking-button" data-waiter-resolve>
-                  <i class="fa-solid fa-heart" aria-hidden="true"></i>
-                  <span>${copy.resolveDemo}</span>
-                </button>`
-          }
         </div>
       </div>
     `;
@@ -5106,6 +5093,12 @@ infoTrigger.addEventListener("keydown", (event) => {
     event.preventDefault();
     infoModal.showModal();
   }
+});
+
+document.querySelectorAll("dialog.modal").forEach((dialog) => {
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
 });
 
 Promise.all([

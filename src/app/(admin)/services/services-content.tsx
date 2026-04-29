@@ -452,7 +452,7 @@ export function ServicesContent({ services, zones }: { services: ServiceItem[]; 
                     <Button
                       size="icon-sm"
                       variant="danger"
-                      className="h-8 w-8 bg-red-50/90 backdrop-blur-md"
+                      className="h-8 w-8"
                       onClick={() => handleDeleteClick(item.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
