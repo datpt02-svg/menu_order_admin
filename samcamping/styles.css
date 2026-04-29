@@ -1353,6 +1353,13 @@ button {
   font: inherit;
   font-size: 0.76rem;
   font-weight: 700;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.waiter-quick-chip.is-selected {
+  border-color: rgba(63, 111, 66, 0.34);
+  background: #e5f3df;
+  box-shadow: 0 4px 12px rgba(45, 82, 44, 0.12);
 }
 
 .waiter-section-title {

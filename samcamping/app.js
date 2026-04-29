@@ -4055,7 +4055,7 @@ function renderWaiterFlow() {
           ${copy.quickLocations
             .map(
               (location) => `
-                <button type="button" class="waiter-quick-chip" data-waiter-location="${escapeHtml(location)}">
+                <button type="button" class="waiter-quick-chip ${state.waiterDraft.location === location ? "is-selected" : ""}" data-waiter-location="${escapeHtml(location)}">
                   ${location}
                 </button>
               `
