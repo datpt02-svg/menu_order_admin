@@ -56,10 +56,20 @@ type ZoneItem = {
   name: string;
 };
 
+type TableItem = {
+  id: number;
+  code: string;
+  zoneId: number | null;
+  seats: number;
+  status: string;
+  zoneName?: string | null;
+};
+
 type BookingContentProps = {
   initialData: {
     bookings: BookingItem[];
     zones: ZoneItem[];
+    tables?: TableItem[];
   };
   highlightedBookingId?: number;
 };
@@ -164,10 +174,12 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   const [formError, setFormError] = useState<string | null>(null);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
+  const [formZoneSlug, setFormZoneSlug] = useState<string>("all");
   const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
 
   const bookings = initialData.bookings;
   const zones = initialData.zones;
+  const tables = initialData.tables || [];
 
   const BOOKING_ROWS_PER_PAGE = 5;
 
@@ -249,6 +261,14 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
     }, 300);
     return () => window.clearTimeout(timer);
   }, [bookings, highlightedBookingId]);
+
+  useEffect(() => {
+    if (selectedBooking) {
+      setFormZoneSlug(zones.find((z) => z.name === selectedBooking.zoneName)?.slug || "all");
+    } else {
+      setFormZoneSlug("all");
+    }
+  }, [selectedBooking, zones]);
 
   const assignRowRef = (id: number) => (node: HTMLTableRowElement | null) => {
     rowRefs.current[id] = node;
@@ -796,7 +816,10 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 </div>
                 <div>
                   <FieldLabel>Khu vực</FieldLabel>
-                  <Select name="zoneSlug" defaultValue={zones.find((z) => z.name === selectedBooking?.zoneName)?.slug || "all"} onChange={clearFieldError("zoneSlug")} invalid={hasError("zoneSlug")}>
+                  <Select name="zoneSlug" value={formZoneSlug} onChange={(e) => {
+                    setFormZoneSlug(e.target.value);
+                    clearFieldError("zoneSlug")?.();
+                  }} invalid={hasError("zoneSlug")}>
                     <option value="all">Chưa gán khu</option>
                     {zones.map((zone) => (
                       <option key={zone.id} value={zone.slug}>{zone.name}</option>
@@ -806,7 +829,18 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 </div>
                 <div>
                   <FieldLabel>Bàn cụ thể</FieldLabel>
-                  <Input name="tableCode" defaultValue={selectedBooking?.tableCode || ""} placeholder="Ví dụ: A-01" onChange={clearFieldError("tableCode")} invalid={hasError("tableCode")} />
+                  <Select name="tableCode" defaultValue={selectedBooking?.tableCode || ""} onChange={() => clearFieldError("tableCode")?.()} invalid={hasError("tableCode")}>
+                    <option value="">Chưa gán bàn</option>
+                    {tables
+                      .filter((table) => {
+                        if (formZoneSlug === "all") return true;
+                        const zone = zones.find((z) => z.slug === formZoneSlug);
+                        return table.zoneId === zone?.id;
+                      })
+                      .map((table) => (
+                        <option key={table.id} value={table.code}>{table.code} ({table.seats} khách)</option>
+                      ))}
+                  </Select>
                   <FieldError>{fieldErrors.tableCode}</FieldError>
                 </div>
               </div>

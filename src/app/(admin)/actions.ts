@@ -84,6 +84,7 @@ async function findShiftIdByWindow(shiftDate: string, startTime: string, endTime
 
 async function resolveShiftForAssignmentMove({
   currentShift,
+  assignmentId,
   shiftDate,
   startTime,
   endTime,
@@ -91,15 +92,39 @@ async function resolveShiftForAssignmentMove({
   zoneId,
 }: {
   currentShift: typeof staffShifts.$inferSelect;
+  assignmentId: number;
   shiftDate: string;
   startTime: string;
   endTime: string;
   shiftLabel: string;
   zoneId: number | null;
 }) {
+  // If an exact-matching shift already exists (different from current), use it
   const existingShiftId = await findShiftIdByWindow(shiftDate, startTime, endTime, shiftLabel);
-  if (existingShiftId) return existingShiftId;
+  if (existingShiftId && existingShiftId !== currentShift.id) return existingShiftId;
 
+  // Count how many assignments are linked to the current shift
+  const siblingRows = await db
+    .select({ id: staffAssignments.id })
+    .from(staffAssignments)
+    .where(eq(staffAssignments.staffShiftId, currentShift.id));
+
+  const isOnlyAssignment = siblingRows.length === 1 && siblingRows[0]?.id === assignmentId;
+
+  if (isOnlyAssignment) {
+    // Update the shift in-place — no new record needed
+    await db.update(staffShifts).set({
+      shiftDate,
+      startTime,
+      endTime,
+      label: shiftLabel,
+      zoneId: zoneId ?? currentShift.zoneId,
+      updatedAt: new Date(),
+    }).where(eq(staffShifts.id, currentShift.id));
+    return currentShift.id;
+  }
+
+  // Shift is shared — create a new shift for this assignment only
   const inserted = await db.insert(staffShifts).values({
     shiftDate,
     startTime,
@@ -1718,11 +1743,19 @@ export async function moveStaffAssignmentAction(formData: FormData) {
   const requestedStartTime = valueOf(formData, "startTime");
   const requestedEndTime = valueOf(formData, "endTime");
 
-  let nextShiftId = requestedShiftId || await findShiftIdByLabel(requestedDate, valueOf(formData, "shiftLabel"));
+  // When a new start time is provided (drag/resize), skip label-based lookup because
+  // findShiftIdByLabel matches on date+label only and would return the ORIGINAL shift
+  // (same date, same label) causing the assignment to silently revert.
+  let nextShiftId: number | null = requestedShiftId || null;
+
+  if (!nextShiftId && !requestedStartTime) {
+    nextShiftId = await findShiftIdByLabel(requestedDate, valueOf(formData, "shiftLabel"));
+  }
 
   if (!nextShiftId) {
     const resolvedShiftId = await resolveShiftForAssignmentMove({
       currentShift,
+      assignmentId: id,
       shiftDate: requestedDate || currentShift.shiftDate,
       startTime: requestedStartTime || currentShift.startTime,
       endTime: requestedEndTime || currentShift.endTime,

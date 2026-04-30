@@ -1,6 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 
-import { safeBookings, safeZones } from "@/lib/server/safe-data";
+import { safeBookings, safeTables, safeZones } from "@/lib/server/safe-data";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { BookingContent } from "./booking-content";
 
@@ -12,9 +12,10 @@ export default async function BookingsPage({
   searchParams?: Promise<PageSearchParams>;
 }) {
   noStore();
-  const [{ data: bookingRows }, { data: zones }, resolvedSearchParams] = await Promise.all([
+  const [{ data: bookingRows }, { data: zones }, { data: tables }, resolvedSearchParams] = await Promise.all([
     safeBookings(),
     safeZones(),
+    safeTables(),
     searchParams ?? Promise.resolve<PageSearchParams>({}),
   ]);
   const bookingIdParam = resolvedSearchParams.bookingId;
@@ -32,6 +33,7 @@ export default async function BookingsPage({
         initialData={{
           bookings: bookingRows,
           zones,
+          tables,
         }}
         highlightedBookingId={Number.isFinite(highlightedBookingId) ? highlightedBookingId : undefined}
       />

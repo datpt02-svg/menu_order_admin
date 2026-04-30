@@ -374,8 +374,8 @@ function StaffCalendarSurface({
         editable={!isPending}
         selectable
         eventDurationEditable
-        height="auto"
-        contentHeight={undefined}
+        scrollTime="08:00:00"
+        height={isExpanded ? "100%" : 680}
         events={events}
         select={onDateSelect}
         eventClick={onEventClick}
@@ -405,6 +405,7 @@ export function StaffCalendar({
   const [zoneFilter, setZoneFilter] = useState("all");
   const [bookingStatusFilter, setBookingStatusFilter] = useState("all");
   const [staffRoleFilter, setStaffRoleFilter] = useState("all");
+  const [calendarViewMode, setCalendarViewMode] = useState<"both" | "booking" | "staff">("both");
   const [quickAssignmentRole, setQuickAssignmentRole] = useState("all");
   const [quickAssignmentZone, setQuickAssignmentZone] = useState("all");
   const [quickAssignmentStaffId, setQuickAssignmentStaffId] = useState<string>("");
@@ -471,7 +472,7 @@ export function StaffCalendar({
   const hasActiveFilters = zoneFilter !== "all" || bookingStatusFilter !== "all" || staffRoleFilter !== "all";
 
   const events = useMemo<EventInput[]>(() => {
-    const bookingEvents = filteredBookings.map((booking) => ({
+    const bookingEvents = calendarViewMode !== "staff" ? filteredBookings.map((booking) => ({
       id: `booking-${booking.id}`,
       title: `${booking.customerName} · ${booking.tableCode ?? "Chưa gán bàn"}`,
       start: `${booking.bookingDate}T${booking.bookingTime}:00`,
@@ -481,9 +482,9 @@ export function StaffCalendar({
         entityType: "booking",
         item: booking,
       },
-    }));
+    })) : [];
 
-    const assignmentEvents = filteredAssignments.map((assignment) => ({
+    const assignmentEvents = calendarViewMode !== "booking" ? filteredAssignments.map((assignment) => ({
       id: `assignment-${assignment.id}`,
       title: `${assignment.staffFullName} · ${assignment.assignmentRole ?? assignment.staffRole}`,
       start: `${assignment.shiftDate}T${assignment.startTime}:00`,
@@ -493,10 +494,10 @@ export function StaffCalendar({
         entityType: "assignment",
         item: assignment,
       },
-    }));
+    })) : [];
 
     return [...bookingEvents, ...assignmentEvents];
-  }, [filteredAssignments, filteredBookings, highlightedAssignmentId]);
+  }, [calendarViewMode, filteredAssignments, filteredBookings, highlightedAssignmentId]);
 
   const quickCreateStaffList = useMemo(
     () =>
@@ -832,6 +833,12 @@ export function StaffCalendar({
             endTime: (nextEnd ?? nextStart).toTimeString().slice(0, 5),
           },
         });
+
+        // Scroll to the new time so the event stays visible even if dragged out of viewport
+        const calendarApi = calendarApiRef.current ?? calendarRef.current?.getApi() ?? null;
+        if (calendarApi) {
+          calendarApi.scrollToTime(nextTime);
+        }
       }
 
       router.refresh();
@@ -932,9 +939,31 @@ export function StaffCalendar({
               </Button>
             </div>
           </div>
-          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
-            <span>{visibleEventCount} mục đang hiển thị</span>
-            {filterSummary ? <span>• {filterSummary}</span> : null}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <span>{visibleEventCount} mục đang hiển thị</span>
+              {filterSummary ? <span>• {filterSummary}</span> : null}
+            </div>
+            <div className="flex items-center gap-1 rounded-[999px] bg-white/70 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] border border-[color:var(--line)]">
+              {([
+                { value: "both", label: "Tất cả" },
+                { value: "booking", label: "Booking" },
+                { value: "staff", label: "Nhân sự" },
+              ] as const).map((mode) => (
+                <button
+                  key={mode.value}
+                  type="button"
+                  onClick={() => setCalendarViewMode(mode.value)}
+                  className={`rounded-[999px] px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                    calendarViewMode === mode.value
+                      ? "bg-gradient-to-br from-[#3f6f42] to-[#5e8b56] text-[#f8fff5] shadow-[0_6px_14px_rgba(45,82,44,0.2)]"
+                      : "text-[var(--forest-dark)] hover:bg-[rgba(110,149,101,0.12)]"
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {usingFallback ? (
