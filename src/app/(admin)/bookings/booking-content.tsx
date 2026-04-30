@@ -15,7 +15,7 @@ import {
   type BookingSortKey,
   type BookingSortState,
 } from "@/lib/bookings";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, getTodayDateString } from "@/lib/utils";
 
 import { deleteBookingAction, reviewBookingDepositAction, saveBookingAction, updateBookingStatusAction } from "@/app/(admin)/actions";
 import { BookingStatusDropdown, getBookingStatusOptions, getBookingStatusValue, type BookingStatus } from "@/components/admin/booking-status-dropdown";
@@ -550,7 +550,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                             <td className="py-4 pr-4 align-top text-[var(--muted)]">
                               <div className="flex items-center gap-1.5 whitespace-nowrap">
                                 <Calendar className="h-3.5 w-3.5" />
-                                {booking.bookingDate}
+                                {formatDate(booking.bookingDate)}
                               </div>
                               <div className="ml-5 whitespace-nowrap">{booking.bookingTime}</div>
                             </td>
@@ -750,7 +750,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                     </div>
                     <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
                       <div>SĐT: {selectedBooking.customerPhone}</div>
-                      <div>Lịch: {selectedBooking.bookingDate} · {selectedBooking.bookingTime}</div>
+                      <div>Lịch: {formatDate(selectedBooking.bookingDate)} · {selectedBooking.bookingTime}</div>
                       <div>Số khách: {selectedBooking.guestCount}</div>
                       <div>Vị trí: {getBookingZoneFallback(selectedBooking.zoneName)} / {getBookingTableFallback(selectedBooking.tableCode)}</div>
                       <div>Trạng thái booking: {getBookingStatusText(selectedBooking.status)}</div>
@@ -801,7 +801,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 </div>
                 <div>
                   <FieldLabel>Ngày đặt</FieldLabel>
-                  <Input name="bookingDate" type="date" defaultValue={selectedBooking?.bookingDate} required onChange={clearFieldError("bookingDate")} invalid={hasError("bookingDate")} />
+                  <Input name="bookingDate" type="date" defaultValue={selectedBooking?.bookingDate ?? getTodayDateString()} required onChange={clearFieldError("bookingDate")} invalid={hasError("bookingDate")} />
                   <FieldError>{fieldErrors.bookingDate}</FieldError>
                 </div>
                 <div>

@@ -4,7 +4,7 @@ import { StaffContent } from "./staff-content";
 
 export default async function StaffPage() {
   const {
-    data: { staffList, shiftList, assignmentList, zoneList },
+    data: { staffList, shiftList, assignmentList, zoneList, templateList },
   } = await safeStaffPageData();
 
   return (
@@ -18,7 +18,8 @@ export default async function StaffPage() {
           staffList, 
           shiftList, 
           assignmentList, 
-          zoneList 
+          zoneList,
+          templateList
         }} 
       />
     </AdminShell>

@@ -1,4 +1,5 @@
 import type { BookingRow, ZoneRow } from "@/lib/server/serializers";
+import { formatDate, getTodayDateString } from "@/lib/utils";
 
 export type BookingFilterInput = {
   keyword?: string | null;
@@ -173,7 +174,7 @@ export function hasBookingFilters(filters: BookingFilterInput) {
 }
 
 export function buildBookingExportFilename(filters: BookingFilterInput) {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = getTodayDateString();
   return hasBookingFilters(filters) ? `bookings-${date}-filtered.xlsx` : `bookings-${date}.xlsx`;
 }
 
@@ -199,7 +200,7 @@ export function mapBookingToExportRow(booking: BookingRow) {
     code: booking.code,
     customerName: booking.customerName,
     customerPhone: booking.customerPhone,
-    bookingDate: booking.bookingDate,
+    bookingDate: formatDate(booking.bookingDate),
     bookingTime: booking.bookingTime,
     guestCount: booking.guestCount,
     bookingStatus: getBookingStatusLabel(booking.status),
@@ -221,7 +222,7 @@ export function getBookingFilterSummary(filters: BookingFilterInput, zoneList: P
 
   return {
     keyword: filters.keyword?.trim() || "Tất cả",
-    date: filters.date?.trim() || "Tất cả",
+    date: formatDate(filters.date?.trim()) || "Tất cả",
     status: filters.status?.trim() && filters.status !== "all" ? getBookingStatusLabel(filters.status as BookingRow["status"]) : "Tất cả",
     zone: selectedZoneName,
   };

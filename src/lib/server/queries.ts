@@ -2,12 +2,14 @@ import { and, asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import { getPublicApiBaseUrl } from "@/lib/env";
+import { getTodayDateString } from "@/lib/utils";
 import {
   bookingConfigs,
   bookings,
   menuItems,
   menuSections,
   services,
+  shiftTemplates,
   staffAssignments,
   staffMembers,
   staffShifts,
@@ -30,6 +32,7 @@ import type {
   StaffAssignmentRow,
   StaffMemberRow,
   StaffShiftRow,
+  ShiftTemplateRow,
   TableRow,
   UserMenuSectionRow,
   WaiterRow,
@@ -63,7 +66,7 @@ function buildTimeline(bookingList: BookingRow[]) {
 }
 
 function getTodayString() {
-  return new Date().toISOString().slice(0, 10);
+  return getTodayDateString();
 }
 
 function isAssignmentOverlapping(first: StaffAssignmentRow, second: StaffAssignmentRow) {
@@ -212,6 +215,27 @@ export async function getTables(): Promise<TableRow[]> {
     .orderBy(tables.code);
 
   return rows satisfies TableRow[];
+}
+
+export async function getShiftTemplates(): Promise<ShiftTemplateRow[]> {
+  const rows = await db
+    .select({
+      id: shiftTemplates.id,
+      label: shiftTemplates.label,
+      startTime: shiftTemplates.startTime,
+      endTime: shiftTemplates.endTime,
+      zoneId: shiftTemplates.zoneId,
+      headcountRequired: shiftTemplates.headcountRequired,
+      notes: shiftTemplates.notes,
+      createdAt: shiftTemplates.createdAt,
+      updatedAt: shiftTemplates.updatedAt,
+      zoneName: zones.name,
+    })
+    .from(shiftTemplates)
+    .leftJoin(zones, eq(shiftTemplates.zoneId, zones.id))
+    .orderBy(desc(shiftTemplates.updatedAt));
+
+  return rows satisfies ShiftTemplateRow[];
 }
 
 export async function getServices(): Promise<ServiceRow[]> {

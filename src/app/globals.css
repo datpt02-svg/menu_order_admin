@@ -120,3 +120,18 @@ textarea {
 .notification-bell-ring {
   animation: notification-bell-ring 1.2s ease-in-out infinite;
 }
+
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-toast-in {
+  animation: toast-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}

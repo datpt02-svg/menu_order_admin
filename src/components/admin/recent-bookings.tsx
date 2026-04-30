@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldLabel, Input, Select } from "@/components/ui/field";
 import { Pagination } from "@/components/ui/pagination";
+import { formatDate } from "@/lib/utils";
 import { SectionHeading } from "./section-heading";
 
 type BookingItem = {
@@ -250,7 +251,7 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
                       <td className="py-4 pr-4 align-top text-[var(--muted)]">
                         <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <Calendar className="h-3.5 w-3.5" />
-                          {booking.bookingDate}
+                          {formatDate(booking.bookingDate)}
                         </div>
                         <div className="ml-5 whitespace-nowrap">{booking.bookingTime}</div>
                       </td>

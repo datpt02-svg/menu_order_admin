@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { safeDashboardSnapshot, safeZones } from "@/lib/server/safe-data";
+import { getTodayDateString } from "@/lib/utils";
 
 function getBookingTone(status: string) {
   if (status === "pending") return "warning" as const;
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
       href: "/bookings",
     },
   ];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayDateString();
   const todaysBookings = snapshot.bookingList.filter(b => b.bookingDate === today);
   const waiterFeed = snapshot.waiterList.slice(0, 4);
   return (

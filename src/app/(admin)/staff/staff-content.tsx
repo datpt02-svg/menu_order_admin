@@ -9,19 +9,25 @@ import {
   deleteStaffAssignmentAction,
   deleteStaffMemberAction,
   deleteStaffShiftAction,
+  deleteShiftTemplateAction,
   saveStaffAssignmentVoidAction,
   saveStaffMemberAction,
   saveStaffShiftAction,
+  saveShiftTemplateAction,
+  applyShiftTemplatesAction,
   toggleStaffStatusAction,
 } from "@/app/(admin)/actions";
 import { cn } from "@/lib/utils";
+import { FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
+import { Modal } from "@/components/ui/modal";
+import { Pagination } from "@/components/ui/pagination";
+import { formatDate, getTodayDateString } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
 import { SectionHeading } from "@/components/admin/section-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
-import { Modal } from "@/components/ui/modal";
-import { Pagination } from "@/components/ui/pagination";
+
 
 type StaffItem = {
   id: number;
@@ -61,6 +67,17 @@ type AssignmentItem = {
   notes?: string | null;
 };
 
+type ShiftTemplateItem = {
+  id: number;
+  label: string;
+  startTime: string;
+  endTime: string;
+  zoneId: number | null;
+  zoneName?: string | null;
+  headcountRequired?: number | null;
+  notes?: string | null;
+};
+
 type ZoneItem = {
   id: number;
   slug: string;
@@ -73,6 +90,7 @@ type StaffContentProps = {
     shiftList: ShiftItem[];
     assignmentList: AssignmentItem[];
     zoneList: ZoneItem[];
+    templateList: ShiftTemplateItem[];
   };
 };
 
@@ -81,6 +99,8 @@ type StaffSortKey = "code" | "fullName" | "role" | "preferredZoneName" | "status
 type SortDirection = "asc" | "desc";
 
 const STAFF_ROWS_PER_PAGE = 5;
+const SHIFT_ROWS_PER_PAGE = 15;
+const ASSIGNMENT_ROWS_PER_PAGE = 15;
 
 function getStaffStatusLabel(status: string): string {
   if (status === "active") return "Đang hoạt động";
@@ -235,25 +255,31 @@ function getAssignmentTone(status: string) {
 export function StaffContent({ initialData }: StaffContentProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const { staffList, shiftList, assignmentList, zoneList } = initialData;
+  const { staffList, shiftList, assignmentList, zoneList, templateList } = initialData;
+  const { success, error: toastError } = useToast();
 
   // Modal states
-  const [activeModal, setActiveModal] = useState<"staff" | "shift" | "assignment" | null>(null);
-  const [selectedItem, setSelectedItem] = useState<StaffItem | ShiftItem | AssignmentItem | null>(null);
-
+  const [activeModal, setActiveModal] = useState<"staff" | "shift" | "assignment" | "template" | "apply" | null>(null);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([]);
+  const [applyRange, setApplyRange] = useState({ from: "", to: "" });
+  
   const staff = activeModal === "staff" ? selectedItem as StaffItem : null;
   const shift = activeModal === "shift" ? selectedItem as ShiftItem : null;
   const assignment = activeModal === "assignment" ? selectedItem as AssignmentItem : null;
+  const template = activeModal === "template" ? selectedItem as ShiftTemplateItem : null;
   
   // Delete confirm state
   const [statusPendingId, setStatusPendingId] = useState<number | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ id: number; type: "staff" | "shift" | "assignment" } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; type: "staff" | "shift" | "assignment" | "template" } | null>(null);
   const [keyword, setKeyword] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [preferredZoneFilter, setPreferredZoneFilter] = useState("all");
   const [staffPage, setStaffPage] = useState(1);
+  const [shiftPage, setShiftPage] = useState(1);
+  const [assignmentPage, setAssignmentPage] = useState(1);
   const [optimisticStaffStatuses, setOptimisticStaffStatuses] = useState<Record<number, StaffStatus>>({});
   const [staffSortState, setStaffSortState] = useState<{ key: StaffSortKey; direction: SortDirection }>({
     key: "code",
@@ -305,6 +331,16 @@ export function StaffContent({ initialData }: StaffContentProps) {
   const startIndex = (visibleStaffPage - 1) * STAFF_ROWS_PER_PAGE;
   const paginatedStaffList = orderedStaffList.slice(startIndex, startIndex + STAFF_ROWS_PER_PAGE);
 
+  const totalShiftPages = Math.max(1, Math.ceil(shiftList.length / SHIFT_ROWS_PER_PAGE));
+  const visibleShiftPage = Math.min(shiftPage, totalShiftPages);
+  const shiftStartIndex = (visibleShiftPage - 1) * SHIFT_ROWS_PER_PAGE;
+  const paginatedShiftList = shiftList.slice(shiftStartIndex, shiftStartIndex + SHIFT_ROWS_PER_PAGE);
+
+  const totalAssignmentPages = Math.max(1, Math.ceil(assignmentList.length / ASSIGNMENT_ROWS_PER_PAGE));
+  const visibleAssignmentPage = Math.min(assignmentPage, totalAssignmentPages);
+  const assignmentStartIndex = (visibleAssignmentPage - 1) * ASSIGNMENT_ROWS_PER_PAGE;
+  const paginatedAssignmentList = assignmentList.slice(assignmentStartIndex, assignmentStartIndex + ASSIGNMENT_ROWS_PER_PAGE);
+
   const handleStaffSort = (key: StaffSortKey) => {
     setStaffSortState((current) => {
       if (current.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
@@ -324,7 +360,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
     </button>
   );
 
-  const handleEdit = (type: "staff" | "shift" | "assignment", item: StaffItem | ShiftItem | AssignmentItem) => {
+  const handleEdit = (type: "staff" | "shift" | "assignment" | "template", item: any) => {
     setSelectedItem(item);
     setActiveModal(type);
   };
@@ -351,12 +387,12 @@ export function StaffContent({ initialData }: StaffContentProps) {
     });
   };
 
-  const handleAdd = (type: "staff" | "shift" | "assignment") => {
+  const handleAdd = (type: "staff" | "shift" | "assignment" | "template") => {
     setSelectedItem(null);
     setActiveModal(type);
   };
 
-  const confirmDelete = (id: number, type: "staff" | "shift" | "assignment") => {
+  const confirmDelete = (id: number, type: "staff" | "shift" | "assignment" | "template") => {
     setDeleteTarget({ id, type });
     setIsDeleteConfirmOpen(true);
   };
@@ -371,6 +407,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
       if (deleteTarget.type === "staff") await deleteStaffMemberAction(formData);
       else if (deleteTarget.type === "shift") await deleteStaffShiftAction(formData);
       else if (deleteTarget.type === "assignment") await deleteStaffAssignmentAction(formData);
+      else if (deleteTarget.type === "template") await deleteShiftTemplateAction(formData);
 
       setIsDeleteConfirmOpen(false);
       setDeleteTarget(null);
@@ -540,7 +577,64 @@ export function StaffContent({ initialData }: StaffContentProps) {
           </CardContent>
         </Card>
 
-        {/* Block 2: Ca làm gần nhất */}
+        {/* Block 2: Mẫu ca làm việc (Shift Templates) */}
+        <Card className="border-[color:var(--mint-deep)]/20 bg-gradient-to-br from-[color:var(--mint-light)]/30 to-transparent">
+          <CardContent>
+            <SectionHeading 
+              title="Mẫu ca làm việc" 
+              description="Tạo các mẫu ca cố định rồi áp dụng hàng loạt cho nhiều ngày." 
+              actions={
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setActiveModal("apply")} disabled={templateList.length === 0}>
+                    Áp dụng mẫu ca
+                  </Button>
+                  <Button onClick={() => handleAdd("template")}>
+                    <Plus className="h-4 w-4" />
+                    Thêm mẫu mới
+                  </Button>
+                </div>
+              }
+            />
+            
+            {templateList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-[var(--muted)]">
+                <p>Chưa có mẫu ca nào. Hãy tạo mẫu đầu tiên!</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {templateList.map((template) => (
+                  <div key={template.id} className="group relative rounded-[18px] border border-[color:var(--line)] bg-white/80 p-4 transition-all hover:shadow-md hover:border-[color:var(--mint-deep)]/30">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-[var(--forest-dark)]">{template.label}</div>
+                        <div className="mt-1 text-sm text-[var(--muted)]">{template.startTime} - {template.endTime}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge tone="info">{template.zoneName ?? "Toàn khu"}</Badge>
+                        <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Button variant="ghost" size="icon-sm" onClick={() => handleEdit("template", template)}>
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(template.id, "template")}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    {template.headcountRequired ? (
+                      <div className="mt-3 text-xs text-[var(--muted)] uppercase tracking-wider">Cần {template.headcountRequired} nhân sự</div>
+                    ) : null}
+                    {template.notes && (
+                      <div className="mt-2 line-clamp-1 text-xs text-[var(--muted)] italic">"{template.notes}"</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Block 3: Ca làm gần nhất */}
         <Card>
           <CardContent>
             <SectionHeading 
@@ -554,12 +648,12 @@ export function StaffContent({ initialData }: StaffContentProps) {
               }
             />
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {shiftList.map((shift) => (
+              {paginatedShiftList.map((shift) => (
                 <div key={shift.id} className="group relative rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4 transition-all hover:shadow-md">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold text-[var(--forest-dark)]">{shift.label}</div>
-                      <div className="mt-1 text-sm text-[var(--muted)]">{shift.shiftDate} · {shift.startTime} - {shift.endTime}</div>
+                      <div className="mt-1 text-sm text-[var(--muted)]">{formatDate(shift.shiftDate)} · {shift.startTime} - {shift.endTime}</div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <Badge tone="info">{shift.zoneName ?? "Toàn khu"}</Badge>
@@ -578,6 +672,15 @@ export function StaffContent({ initialData }: StaffContentProps) {
                 </div>
               ))}
             </div>
+            {totalShiftPages > 1 ? (
+              <div className="mt-4 flex items-center justify-end border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+                <Pagination
+                  currentPage={visibleShiftPage}
+                  totalPages={totalShiftPages}
+                  onPageChange={setShiftPage}
+                />
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -595,12 +698,12 @@ export function StaffContent({ initialData }: StaffContentProps) {
               }
             />
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {assignmentList.map((assignment) => (
+              {paginatedAssignmentList.map((assignment) => (
                 <div key={assignment.id} className="group relative rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4 transition-all hover:shadow-md">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold text-[var(--forest-dark)]">{assignment.staffFullName}</div>
-                      <div className="mt-1 text-sm text-[var(--muted)]">{assignment.shiftLabel} · {assignment.shiftDate} · {assignment.startTime} - {assignment.endTime}</div>
+                      <div className="mt-1 text-sm text-[var(--muted)]">{assignment.shiftLabel} · {formatDate(assignment.shiftDate)} · {assignment.startTime} - {assignment.endTime}</div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <Badge tone={getAssignmentTone(assignment.status)}>{assignment.status}</Badge>
@@ -623,6 +726,15 @@ export function StaffContent({ initialData }: StaffContentProps) {
                 </div>
               ))}
             </div>
+            {totalAssignmentPages > 1 ? (
+              <div className="mt-4 flex items-center justify-end border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+                <Pagination
+                  currentPage={visibleAssignmentPage}
+                  totalPages={totalAssignmentPages}
+                  onPageChange={setAssignmentPage}
+                />
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -722,7 +834,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <FieldLabel>Ngày</FieldLabel>
-              <Input name="shiftDate" type="date" defaultValue={shift?.shiftDate ?? new Date().toISOString().slice(0, 10)} required />
+              <Input name="shiftDate" type="date" defaultValue={shift?.shiftDate ?? getTodayDateString()} required />
             </div>
             <div>
               <FieldLabel>Bắt đầu</FieldLabel>
@@ -772,9 +884,10 @@ export function StaffContent({ initialData }: StaffContentProps) {
               try {
                 await saveStaffAssignmentVoidAction(formData);
                 setActiveModal(null);
+                success("Đã lưu phân công thành công!");
                 router.refresh();
-              } catch (error) {
-                alert(error instanceof Error ? error.message : "Có lỗi xảy ra");
+              } catch (err) {
+                toastError(err instanceof Error ? err.message : "Có lỗi xảy ra");
               }
             });
           }} 
@@ -793,7 +906,7 @@ export function StaffContent({ initialData }: StaffContentProps) {
             <FieldLabel>Ca làm</FieldLabel>
             <Select name="staffShiftId" defaultValue={assignment?.staffShiftId ?? shiftList[0]?.id}>
               {shiftList.map((shift) => (
-                <option key={shift.id} value={shift.id}>{shift.label} · {shift.shiftDate} · {shift.startTime} - {shift.endTime}</option>
+                <option key={shift.id} value={shift.id}>{shift.label} · {formatDate(shift.shiftDate)} · {shift.startTime} - {shift.endTime}</option>
               ))}
             </Select>
           </div>
@@ -840,6 +953,161 @@ export function StaffContent({ initialData }: StaffContentProps) {
         </form>
       </Modal>
 
+      {/* Shift Template Modal */}
+      <Modal 
+        isOpen={activeModal === "template"} 
+        onClose={() => setActiveModal(null)} 
+        title={selectedItem ? "Sửa mẫu ca" : "Thêm mẫu ca mới"}
+      >
+        <form 
+          action={async (formData) => {
+            startTransition(async () => {
+              const res = await saveShiftTemplateAction(formData);
+              if (res.ok) {
+                setActiveModal(null);
+                success("Đã lưu mẫu ca thành công!");
+                router.refresh();
+              } else {
+                toastError(res.formError || "Có lỗi xảy ra");
+              }
+            });
+          }} 
+          className="space-y-4"
+        >
+          {selectedItem && <input type="hidden" name="id" value={selectedItem.id} />}
+          <div>
+            <FieldLabel>Tên mẫu ca (VD: Ca tối)</FieldLabel>
+            <Input name="label" defaultValue={selectedItem?.label ?? ""} placeholder="Ví dụ: Ca tối" required />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Bắt đầu</FieldLabel>
+              <Input name="startTime" type="time" defaultValue={selectedItem?.startTime ?? "17:00"} required />
+            </div>
+            <div>
+              <FieldLabel>Kết thúc</FieldLabel>
+              <Input name="endTime" type="time" defaultValue={selectedItem?.endTime ?? "21:00"} required />
+            </div>
+          </div>
+          <div>
+            <FieldLabel>Khu vực mặc định</FieldLabel>
+            <Select name="zoneSlug" defaultValue={zoneList.find((z) => z.id === selectedItem?.zoneId)?.slug ?? "all"}>
+              <option value="all">Toàn khu</option>
+              {zoneList.map((zone) => (
+                <option key={zone.id} value={zone.slug}>{zone.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <FieldLabel>Headcount yêu cầu (tùy chọn)</FieldLabel>
+            <Input name="headcountRequired" type="number" defaultValue={selectedItem?.headcountRequired ?? 0} />
+          </div>
+          <div>
+            <FieldLabel>Ghi chú</FieldLabel>
+            <Textarea name="notes" defaultValue={selectedItem?.notes ?? ""} />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setActiveModal(null)}>Hủy</Button>
+            <Button type="submit" disabled={isPending}>
+              <Save className="h-4 w-4" />
+              {isPending ? "Đang lưu..." : "Lưu mẫu"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Apply Templates Modal */}
+      <Modal 
+        isOpen={activeModal === "apply"} 
+        onClose={() => setActiveModal(null)} 
+        title="Áp dụng mẫu ca cho ngày"
+        className="max-w-lg"
+      >
+        <form 
+          action={async (formData) => {
+            selectedTemplateIds.forEach(id => formData.append("templateIds", String(id)));
+            startTransition(async () => {
+              const res = await applyShiftTemplatesAction(formData);
+              if (res.ok) {
+                success(res.message || "Đã áp dụng mẫu ca thành công!");
+                setActiveModal(null);
+                router.refresh();
+              } else {
+                toastError(res.formError || "Có lỗi xảy ra");
+              }
+            });
+          }} 
+          className="space-y-6"
+        >
+          <div>
+            <FieldLabel className="mb-2 block">Chọn mẫu ca muốn áp dụng</FieldLabel>
+            <div className="grid gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+              {templateList.map((template) => (
+                <label 
+                  key={template.id} 
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border p-3 transition-all cursor-pointer hover:bg-[color:var(--mint-light)]/20",
+                    selectedTemplateIds.includes(template.id) 
+                      ? "border-[color:var(--mint-deep)] bg-[color:var(--mint-light)]/10 shadow-sm" 
+                      : "border-[color:var(--line)] bg-white"
+                  )}
+                >
+                  <input 
+                    type="checkbox" 
+                    className="h-4 w-4 rounded border-[color:var(--line)] text-[color:var(--mint-deep)] focus:ring-[color:var(--mint-deep)]"
+                    checked={selectedTemplateIds.includes(template.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedTemplateIds([...selectedTemplateIds, template.id]);
+                      else setSelectedTemplateIds(selectedTemplateIds.filter(id => id !== template.id));
+                    }}
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-[var(--forest-dark)]">{template.label}</div>
+                    <div className="text-xs text-[var(--muted)]">{template.startTime} - {template.endTime} · {template.zoneName ?? "Toàn khu"}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Từ ngày</FieldLabel>
+              <Input 
+                name="dateFrom" 
+                type="date" 
+                value={applyRange.from} 
+                onChange={(e) => setApplyRange({ ...applyRange, from: e.target.value })} 
+                required 
+              />
+            </div>
+            <div>
+              <FieldLabel>Đến ngày</FieldLabel>
+              <Input 
+                name="dateTo" 
+                type="date" 
+                value={applyRange.to} 
+                onChange={(e) => setApplyRange({ ...applyRange, to: e.target.value })} 
+                required 
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-700 leading-relaxed">
+            Hệ thống sẽ tạo ca cho từng ngày trong khoảng này. 
+            <strong> Những ca đã tồn tại trùng giờ và nhãn sẽ được bỏ qua.</strong>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setActiveModal(null)}>Hủy</Button>
+            <Button type="submit" disabled={isPending || selectedTemplateIds.length === 0 || !applyRange.from || !applyRange.to}>
+              <Check className="h-4 w-4" />
+              {isPending ? "Đang xử lý..." : "Bắt đầu áp dụng"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Delete Confirmation Dialog */}
       <Modal
         isOpen={isDeleteConfirmOpen}
@@ -854,7 +1122,8 @@ export function StaffContent({ initialData }: StaffContentProps) {
               Bạn có chắc chắn muốn xóa {
                 deleteTarget?.type === "staff" ? "nhân viên" : 
                 deleteTarget?.type === "shift" ? "ca làm" : 
-                deleteTarget?.type === "assignment" ? "phân công" : "mục"
+                deleteTarget?.type === "assignment" ? "phân công" : 
+                deleteTarget?.type === "template" ? "mẫu ca" : "mục"
               } này?
             </p>
           </div>

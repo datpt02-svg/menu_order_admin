@@ -11,6 +11,7 @@ import {
   menuItems,
   menuSections,
   services,
+  shiftTemplates,
   staffAssignmentEvents,
   staffAssignments,
   staffMembers,
@@ -1883,4 +1884,105 @@ export async function saveStaffAssignmentVoidAction(formData: FormData) {
   await saveStaffAssignmentAction(formData);
 }
 
+export async function saveShiftTemplateAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  const label = valueOf(formData, "label");
+  const startTime = valueOf(formData, "startTime");
+  const endTime = valueOf(formData, "endTime");
+  const zoneSlug = valueOf(formData, "zoneSlug");
+  const headcountRequired = numberValue(formData, "headcountRequired", 0);
+  const notes = valueOf(formData, "notes");
 
+  if (!label || !startTime || !endTime) {
+    return { ok: false, formError: "Vui lòng nhập đầy đủ tên ca, giờ bắt đầu và kết thúc." };
+  }
+
+  const zoneId = await findZoneIdBySlug(zoneSlug);
+
+  const data = {
+    label,
+    startTime,
+    endTime,
+    zoneId,
+    headcountRequired: headcountRequired > 0 ? headcountRequired : null,
+    notes,
+    updatedAt: new Date(),
+  };
+
+  if (id) {
+    await db.update(shiftTemplates).set(data).where(eq(shiftTemplates.id, id));
+  } else {
+    await db.insert(shiftTemplates).values(data);
+  }
+
+  revalidatePath("/staff");
+  return { ok: true };
+}
+
+export async function deleteShiftTemplateAction(formData: FormData) {
+  const id = numberValue(formData, "id");
+  if (!id) return { ok: false };
+
+  await db.delete(shiftTemplates).where(eq(shiftTemplates.id, id));
+  revalidatePath("/staff");
+  return { ok: true };
+}
+
+export async function applyShiftTemplatesAction(formData: FormData) {
+  const templateIds = formData.getAll("templateIds").map(Number).filter(Boolean);
+  const dateFrom = valueOf(formData, "dateFrom");
+  const dateTo = valueOf(formData, "dateTo");
+
+  if (templateIds.length === 0 || !dateFrom || !dateTo) {
+    return { ok: false, formError: "Vui lòng chọn mẫu ca và khoảng ngày áp dụng." };
+  }
+
+  const startDate = new Date(dateFrom);
+  const endDate = new Date(dateTo);
+  
+  if (startDate > endDate) {
+    return { ok: false, formError: "Ngày bắt đầu không thể sau ngày kết thúc." };
+  }
+
+  const templates = await db.select().from(shiftTemplates).where(sql`${shiftTemplates.id} IN (${sql.join(templateIds, sql`, `)})`);
+  
+  if (templates.length === 0) {
+    return { ok: false, formError: "Không tìm thấy mẫu ca nào được chọn." };
+  }
+
+  const results = { created: 0, skipped: 0 };
+  
+  const daysDiff = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  for (let i = 0; i <= daysDiff; i++) {
+    const currentDate = new Date(startDate);
+    currentDate.setDate(startDate.getDate() + i);
+    const dateStr = currentDate.toISOString().split("T")[0];
+
+    for (const template of templates) {
+      // Check if exact shift already exists (Option A: skip if exists)
+      const existingId = await findShiftIdByWindow(dateStr, template.startTime, template.endTime, template.label);
+      
+      if (existingId) {
+        results.skipped++;
+        continue;
+      }
+
+      await db.insert(staffShifts).values({
+        shiftDate: dateStr,
+        startTime: template.startTime,
+        endTime: template.endTime,
+        label: template.label,
+        zoneId: template.zoneId,
+        headcountRequired: template.headcountRequired,
+        notes: template.notes,
+        updatedAt: new Date(),
+      });
+      results.created++;
+    }
+  }
+
+  revalidatePath("/staff");
+  revalidatePath("/calendar");
+  return { ok: true, message: `Đã tạo ${results.created} ca mới, bỏ qua ${results.skipped} ca đã tồn tại.` };
+}

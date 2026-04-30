@@ -36,6 +36,8 @@ export const metadata: Metadata = {
   description: "Admin dashboard for booking, waiter requests, tables and services.",
 };
 
+import { ToastProvider } from "@/components/ui/toast";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -46,7 +48,9 @@ export default function RootLayout({
       lang="vi"
       className={`${beVietnamPro.variable} ${charm.variable} ${hachiMaruPop.variable} ${coiny.variable} h-full antialiased`}
     >
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

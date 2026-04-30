@@ -7,7 +7,7 @@ import { NotificationCenter } from "@/components/admin/notification-center";
 import { RealtimeSync } from "@/components/admin/realtime-sync";
 import { safeDashboardSnapshot } from "@/lib/server/safe-data";
 import { REALTIME_EVENTS } from "@/lib/server/realtime-events";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export type AdminNotificationItem = {
   id: string;
@@ -66,8 +66,8 @@ function buildBookingNotification(booking: {
     id: `booking-${booking.id}`,
     title: `${booking.customerName} · ${booking.guestCount} khách`,
     description: isDepositReview
-      ? `${booking.code} · chờ xác nhận bill cọc · ${booking.bookingDate} ${booking.bookingTime}`
-      : `${booking.code} · ${booking.bookingDate} ${booking.bookingTime} · ${booking.zoneName ?? "Chưa gán khu"}`,
+      ? `${booking.code} · chờ xác nhận bill cọc · ${formatDate(booking.bookingDate)} ${booking.bookingTime}`
+      : `${booking.code} · ${formatDate(booking.bookingDate)} ${booking.bookingTime} · ${booking.zoneName ?? "Chưa gán khu"}`,
     href: `/bookings?${params.toString()}`,
     createdAt: booking.updatedAt.toISOString(),
     tone: isDepositReview ? "danger" : "warning",

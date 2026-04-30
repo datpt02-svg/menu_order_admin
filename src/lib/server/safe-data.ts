@@ -12,6 +12,7 @@ import {
   getDashboardSnapshot,
   getMenuSections,
   getServices,
+  getShiftTemplates,
   getStaffAssignments,
   getStaffMembers,
   getStaffShifts,
@@ -164,6 +165,14 @@ export async function safeStaffAssignments() {
   }
 }
 
+export async function safeShiftTemplates() {
+  try {
+    return { data: await getShiftTemplates(), usingFallback: false };
+  } catch {
+    return { data: [], usingFallback: true };
+  }
+}
+
 export async function safeStaffWorkspace() {
   try {
     return { data: await getStaffingCalendarSnapshot(), usingFallback: false };
@@ -173,11 +182,18 @@ export async function safeStaffWorkspace() {
 }
 
 export async function safeStaffPageData() {
-  const [{ data: staffList, usingFallback: staffFallback }, { data: shiftList, usingFallback: shiftFallback }, { data: assignmentList, usingFallback: assignmentFallback }, { data: zoneList, usingFallback: zoneFallback }] = await Promise.all([
+  const [
+    { data: staffList, usingFallback: staffFallback },
+    { data: shiftList, usingFallback: shiftFallback },
+    { data: assignmentList, usingFallback: assignmentFallback },
+    { data: zoneList, usingFallback: zoneFallback },
+    { data: templateList, usingFallback: templateFallback }
+  ] = await Promise.all([
     safeStaffMembers(),
     safeStaffShifts(),
     safeStaffAssignments(),
     safeZones(),
+    safeShiftTemplates(),
   ]);
 
   return {
@@ -186,7 +202,8 @@ export async function safeStaffPageData() {
       shiftList,
       assignmentList,
       zoneList,
+      templateList,
     },
-    usingFallback: staffFallback || shiftFallback || assignmentFallback || zoneFallback,
+    usingFallback: staffFallback || shiftFallback || assignmentFallback || zoneFallback || templateFallback,
   };
 }

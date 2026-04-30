@@ -4,6 +4,7 @@ import type {
   menuItems,
   menuSections,
   services,
+  shiftTemplates,
   staffAssignments,
   staffMembers,
   staffShifts,
@@ -86,3 +87,7 @@ export type LocaleRow = {
 };
 
 export type ZoneRow = typeof zones.$inferSelect;
+
+export type ShiftTemplateRow = typeof shiftTemplates.$inferSelect & {
+  zoneName?: string | null;
+};

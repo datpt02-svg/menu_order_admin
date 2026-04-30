@@ -185,6 +185,18 @@ export const staffAssignments = pgTable("staff_assignments", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const shiftTemplates = pgTable("shift_templates", {
+  id: serial("id").primaryKey(),
+  label: varchar("label", { length: 120 }).notNull(),
+  startTime: varchar("start_time", { length: 20 }).notNull(),
+  endTime: varchar("end_time", { length: 20 }).notNull(),
+  zoneId: integer("zone_id").references(() => zones.id, { onDelete: "set null" }),
+  headcountRequired: integer("headcount_required"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const staffAssignmentEvents = pgTable("staff_assignment_events", {
   id: serial("id").primaryKey(),
   staffAssignmentId: integer("staff_assignment_id").references(() => staffAssignments.id, { onDelete: "cascade" }).notNull(),

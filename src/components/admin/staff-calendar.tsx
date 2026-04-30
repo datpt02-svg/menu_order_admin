@@ -7,6 +7,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DateSelectArg, EventChangeArg, EventClickArg, EventDropArg, EventInput } from "@fullcalendar/core";
+import viLocale from "@fullcalendar/core/locales/vi";
 import { AlertTriangle, CalendarRange, Expand, Filter, LoaderCircle, Minimize, UsersRound } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -17,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldLabel, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
+import { cn, formatDate, toDateStringICT } from "@/lib/utils";
 
 type BookingItem = {
   id: number;
@@ -366,6 +369,7 @@ function StaffCalendarSurface({
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView={initialView}
         initialDate={initialDate}
+        locale={viLocale}
         headerToolbar={{
           left: "prev,next today",
           center: "title",
@@ -401,6 +405,7 @@ export function StaffCalendar({
   setStaffAssignmentStatusAction,
 }: StaffCalendarProps) {
   const router = useRouter();
+  const { success, error: toastError } = useToast();
   const [isPending, startTransition] = useTransition();
   const [zoneFilter, setZoneFilter] = useState("all");
   const [bookingStatusFilter, setBookingStatusFilter] = useState("all");
@@ -412,9 +417,8 @@ export function StaffCalendar({
   const [quickAssignmentRoleValue, setQuickAssignmentRoleValue] = useState<string>("service");
   const [quickAssignmentRoleTouched, setQuickAssignmentRoleTouched] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CalendarSelection>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [draftAssignment, setDraftAssignment] = useState<{ shiftDate: string; startTime: string; endTime: string } | null>(null);
   const [highlightedAssignmentId, setHighlightedAssignmentId] = useState<number | null>(null);
+  const [draftAssignment, setDraftAssignment] = useState<{ shiftDate: string; startTime: string; endTime: string } | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const calendarRef = useRef<FullCalendar | null>(null);
   const pendingCreatedAssignmentIdRef = useRef<number | null>(null);
@@ -529,7 +533,6 @@ export function StaffCalendar({
     if (matchesCurrentZone) {
       setSelectedItem({ type: "assignment", item: createdAssignment });
       setDraftAssignment(null);
-      setHighlightedAssignmentId(createdAssignment.id);
 
       if (highlightTimeoutRef.current) {
         clearTimeout(highlightTimeoutRef.current);
@@ -555,7 +558,6 @@ export function StaffCalendar({
       if (event.key === "Escape" && draftAssignment) {
         event.preventDefault();
         setDraftAssignment(null);
-        setErrorMessage(null);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -568,13 +570,11 @@ export function StaffCalendar({
     setStaffRoleFilter("all");
     setSelectedItem(null);
     setDraftAssignment(null);
-    setErrorMessage(null);
   }
 
   function clearFilterDependentState() {
     setSelectedItem(null);
     setDraftAssignment(null);
-    setErrorMessage(null);
   }
 
   function handleZoneFilterChange(nextValue: string) {
@@ -693,9 +693,9 @@ export function StaffCalendar({
   }, [preferredQuickStaff, quickAssignmentStaffId, quickCreateStaffList]);
 
   const quickCreateSummary = draftAssignment
-    ? `Tạo ca nhanh · ${draftAssignment.shiftDate} · ${draftAssignment.startTime}-${draftAssignment.endTime}${selectedQuickZone ? ` · ${selectedQuickZone.name}` : ""}`
+    ? `Tạo ca nhanh · ${formatDate(draftAssignment.shiftDate)} · ${draftAssignment.startTime}-${draftAssignment.endTime}${selectedQuickZone ? ` · ${selectedQuickZone.name}` : ""}`
     : selectedQuickShift
-      ? `${selectedQuickShift.shiftDate} · ${selectedQuickShift.label} · ${selectedQuickShift.startTime}-${selectedQuickShift.endTime}${selectedQuickZone ? ` · ${selectedQuickZone.name}` : ""}`
+      ? `${formatDate(selectedQuickShift.shiftDate)} · ${selectedQuickShift.label} · ${selectedQuickShift.startTime}-${selectedQuickShift.endTime}${selectedQuickZone ? ` · ${selectedQuickZone.name}` : ""}`
       : "Chưa có ca khả dụng";
 
   const quickCreateZoneDescription = selectedQuickZone
@@ -703,7 +703,7 @@ export function StaffCalendar({
     : "Assignment mới sẽ để Toàn khu nếu bạn chưa lọc theo khu cụ thể.";
 
   const quickCreateShiftDescription = draftAssignment
-    ? `Danh sách ca sẽ ưu tiên cùng ngày ${draftAssignment.shiftDate} để giữ đúng ngữ cảnh slot bạn vừa chọn.`
+    ? `Danh sách ca sẽ ưu tiên cùng ngày ${formatDate(draftAssignment.shiftDate)} để giữ đúng ngữ cảnh slot bạn vừa chọn.`
     : "Danh sách ca đang hiển thị theo toàn bộ lịch ca hiện có.";
 
   const quickCreateFocusDescription = selectedQuickZone
@@ -732,7 +732,6 @@ export function StaffCalendar({
   function handleExpandedModalClose() {
     if (draftAssignment) {
       setDraftAssignment(null);
-      setErrorMessage(null);
       return;
     }
 
@@ -749,9 +748,8 @@ export function StaffCalendar({
 
   function handleDateSelect(info: DateSelectArg) {
     setSelectedItem(null);
-    setErrorMessage(null);
     setDraftAssignment({
-      shiftDate: info.start.toISOString().slice(0, 10),
+      shiftDate: toDateStringICT(info.start),
       startTime: info.start.toTimeString().slice(0, 5),
       endTime: info.end.toTimeString().slice(0, 5),
     });
@@ -786,10 +784,9 @@ export function StaffCalendar({
   );
 
   async function submitCalendarMove(entityType: "booking" | "assignment", item: BookingItem | AssignmentItem, nextStart: Date, nextEnd?: Date) {
-    setErrorMessage(null);
     try {
       const formData = new FormData();
-      const nextDate = nextStart.toISOString().slice(0, 10);
+      const nextDate = toDateStringICT(nextStart);
       const nextTime = nextStart.toTimeString().slice(0, 5);
 
       if (entityType === "booking") {
@@ -812,6 +809,7 @@ export function StaffCalendar({
             bookingTime: nextTime,
           },
         });
+        success(`Đã chuyển booking của ${booking.customerName} sang ${nextTime} ${nextDate}`);
       } else {
         const assignment = item as AssignmentItem;
         formData.set("id", String(assignment.id));
@@ -833,6 +831,7 @@ export function StaffCalendar({
             endTime: (nextEnd ?? nextStart).toTimeString().slice(0, 5),
           },
         });
+        success(`Đã cập nhật ca ${assignment.shiftLabel} của ${assignment.staffFullName}`);
 
         // Scroll to the new time so the event stays visible even if dragged out of viewport
         const calendarApi = calendarApiRef.current ?? calendarRef.current?.getApi() ?? null;
@@ -843,7 +842,9 @@ export function StaffCalendar({
 
       router.refresh();
     } catch (error) {
-      throw error instanceof Error ? error : new Error("Không thể cập nhật lịch lúc này.");
+      const msg = error instanceof Error ? error.message : "Không thể cập nhật lịch lúc này.";
+      toastError(msg);
+      throw error instanceof Error ? error : new Error(msg);
     }
   }
 
@@ -862,7 +863,6 @@ export function StaffCalendar({
         await submitCalendarMove(entityType, item, eventStart, eventEnd);
       } catch (error) {
         info.revert();
-        setErrorMessage(error instanceof Error ? error.message : "Không thể cập nhật lịch lúc này.");
       }
     });
   }
@@ -887,7 +887,6 @@ export function StaffCalendar({
         await submitCalendarMove("assignment", item, eventStart, eventEnd);
       } catch (error) {
         info.revert();
-        setErrorMessage(error instanceof Error ? error.message : "Không thể resize ca lúc này.");
       }
     });
   }
@@ -971,11 +970,6 @@ export function StaffCalendar({
               Dữ liệu đang ở chế độ fallback, lịch vẫn xem được nhưng cần kiểm tra kết nối DB trước khi điều phối thực tế.
             </div>
           ) : null}
-          {errorMessage ? (
-            <div className="mb-4 rounded-[18px] border border-[rgba(181,74,54,0.2)] bg-[rgba(181,74,54,0.08)] px-4 py-3 text-sm text-[#8c3b27]">
-              {errorMessage}
-            </div>
-          ) : null}
           <div className={calendarContainerClassName}>{isExpanded ? null : renderCalendarSurface()}</div>
         </CardContent>
       </Card>
@@ -995,7 +989,7 @@ export function StaffCalendar({
             <div className="rounded-[18px] bg-white/60 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="font-semibold text-[var(--forest-dark)]">
-                  {topRecommendation ? `${topRecommendation.zoneName} · ${topRecommendation.shiftDate}` : hasActiveFilters ? "Không có khuyến nghị khớp bộ lọc" : "Chưa có khuyến nghị"}
+                  {topRecommendation ? `${topRecommendation.zoneName} · ${formatDate(topRecommendation.shiftDate)}` : hasActiveFilters ? "Không có khuyến nghị khớp bộ lọc" : "Chưa có khuyến nghị"}
                 </div>
                 {topRecommendation ? (
                   <Badge tone={topRecommendation.isShort ? "warning" : "success"}>
@@ -1042,7 +1036,7 @@ export function StaffCalendar({
                   <Badge tone={getStatusTone(selectedBookingItem.status)}>{selectedBookingItem.status}</Badge>
                 </div>
                 <div className="mt-2 space-y-1 text-[var(--muted)]">
-                  <div>{selectedBookingItem.bookingDate} · {selectedBookingItem.bookingTime}</div>
+                  <div>{formatDate(selectedBookingItem.bookingDate)} · {selectedBookingItem.bookingTime}</div>
                   <div>{selectedBookingItem.zoneName ?? "Chưa gán khu"} / {selectedBookingItem.tableCode ?? "Chưa gán bàn"}</div>
                   <div>{selectedBookingItem.guestCount} khách · {selectedBookingItem.customerPhone}</div>
                 </div>
@@ -1057,7 +1051,7 @@ export function StaffCalendar({
                   <Badge tone={getStatusTone(selectedAssignmentItem.status)}>{selectedAssignmentItem.status}</Badge>
                 </div>
                 <div className="mt-2 space-y-1 text-[var(--muted)]">
-                  <div>{selectedAssignmentItem.shiftDate} · {selectedAssignmentItem.startTime}–{selectedAssignmentItem.endTime}</div>
+                  <div>{formatDate(selectedAssignmentItem.shiftDate)} · {selectedAssignmentItem.startTime}–{selectedAssignmentItem.endTime}</div>
                   <div>{selectedAssignmentItem.shiftLabel} · {selectedAssignmentItem.shiftZoneName ?? "Toàn khu"}</div>
                   <div>{selectedAssignmentItem.assignmentRole ?? selectedAssignmentItem.staffRole} · {selectedAssignmentItem.staffPhone}</div>
                 </div>
@@ -1065,13 +1059,12 @@ export function StaffCalendar({
 
                 <form
                   action={async (formData) => {
-                    setErrorMessage(null);
                     try {
                       await moveStaffAssignmentAction(formData);
                       router.refresh();
-                    } catch (error) {
-                      setErrorMessage(error instanceof Error ? error.message : "Không thể chuyển ca lúc này.");
-                    }
+                      } catch (error) {
+                        toastError(error instanceof Error ? error.message : "Không thể chuyển ca lúc này.");
+                      }
                   }}
                   className="mt-4 space-y-3 rounded-[18px] border border-[color:var(--line)] bg-[rgba(248,255,245,0.76)] p-4"
                 >
@@ -1081,7 +1074,7 @@ export function StaffCalendar({
                     <Select name="staffShiftId" defaultValue={String(selectedAssignmentItem.staffShiftId)}>
                       {shiftListForForms.map((shift) => (
                         <option key={shift.id} value={shift.id}>
-                          {shift.shiftDate} · {shift.label} · {shift.startTime}-{shift.endTime}
+                          {formatDate(shift.shiftDate)} · {shift.label} · {shift.startTime}-{shift.endTime}
                         </option>
                       ))}
                     </Select>
@@ -1100,14 +1093,13 @@ export function StaffCalendar({
                       type="submit"
                       className="w-full"
                       formAction={async (formData) => {
-                        setErrorMessage(null);
                         try {
                           formData.delete("staffShiftId");
                           await setStaffAssignmentStatusAction(formData);
                           router.refresh();
-                        } catch (error) {
-                          setErrorMessage(error instanceof Error ? error.message : "Không thể cập nhật trạng thái lúc này.");
-                        }
+                          } catch (error) {
+                            toastError(error instanceof Error ? error.message : "Không thể cập nhật trạng thái lúc này.");
+                          }
                       }}
                     >
                       Cập nhật trạng thái
@@ -1125,14 +1117,14 @@ export function StaffCalendar({
 
                 <form
                   action={async (formData) => {
-                    setErrorMessage(null);
                     try {
                       const assignmentId = await saveStaffAssignmentAction(formData);
                       pendingCreatedAssignmentIdRef.current = assignmentId;
+                      success("Đã tạo phân công mới thành công!");
                       router.refresh();
                     } catch (error) {
                       pendingCreatedAssignmentIdRef.current = null;
-                      setErrorMessage(error instanceof Error ? error.message : "Không thể tạo assignment lúc này.");
+                      toastError(error instanceof Error ? error.message : "Không thể tạo assignment lúc này.");
                     }
                   }}
                   className="rounded-[18px] border border-[color:var(--line)] bg-[rgba(248,255,245,0.76)] p-4"
@@ -1200,14 +1192,13 @@ export function StaffCalendar({
                         <input type="hidden" name="endTime" value={draftAssignment.endTime} />
                         <input type="hidden" name="shiftLabel" value={`Ca nhanh ${draftAssignment.startTime}-${draftAssignment.endTime}`} />
                         <div className="flex items-center justify-between gap-3 rounded-[14px] border border-dashed border-[color:var(--line)] bg-white/70 px-3 py-2 text-xs text-[var(--muted)]">
-                          <span>Đang giữ slot {draftAssignment.shiftDate} · {draftAssignment.startTime}-{draftAssignment.endTime}</span>
+                          <span>Đang giữ slot {formatDate(draftAssignment.shiftDate)} · {draftAssignment.startTime}-{draftAssignment.endTime}</span>
                           <Button
                             type="button"
                             variant="ghost"
                             className="h-auto px-2 py-1 text-xs"
                             onClick={() => {
                               setDraftAssignment(null);
-                              setErrorMessage(null);
                             }}
                           >
                             Xóa slot chọn
@@ -1220,7 +1211,7 @@ export function StaffCalendar({
                         <Select name="staffShiftId" defaultValue={contextualShiftList[0] ? String(contextualShiftList[0].id) : ""}>
                           {contextualShiftList.map((shift) => (
                             <option key={shift.id} value={shift.id}>
-                              {shift.shiftDate} · {shift.label} · {shift.startTime}-{shift.endTime}
+                              {formatDate(shift.shiftDate)} · {shift.label} · {shift.startTime}-{shift.endTime}
                             </option>
                           ))}
                         </Select>
@@ -1236,7 +1227,6 @@ export function StaffCalendar({
                           className="px-3"
                           onClick={() => {
                             setDraftAssignment(null);
-                            setErrorMessage(null);
                           }}
                         >
                           Thoát tạo nhanh
@@ -1278,12 +1268,6 @@ export function StaffCalendar({
                         <option value="absent">Absent</option>
                       </Select>
                     </div>
-                    {errorMessage ? (
-                      <div className="flex items-start gap-2 rounded-[14px] border border-[rgba(181,74,54,0.2)] bg-[rgba(181,74,54,0.08)] px-3 py-2.5 text-xs text-[#8c3b27]">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>{errorMessage}</span>
-                      </div>
-                    ) : null}
                     <SubmitButton>Tạo assignment</SubmitButton>
                   </div>
                 </form>
@@ -1302,7 +1286,7 @@ export function StaffCalendar({
                     <div key={shift.id} className="flex items-center justify-between gap-3">
                       <div>
                         <div>{shift.label}</div>
-                        <div className="text-xs">{shift.shiftDate} · {shift.zoneName ?? "Toàn khu"}</div>
+                        <div className="text-xs">{formatDate(shift.shiftDate)} · {shift.zoneName ?? "Toàn khu"}</div>
                       </div>
                       <Badge tone={assignedCount < (shift.headcountRequired ?? 0) ? "warning" : "success"}>
                         {assignedCount}/{shift.headcountRequired ?? assignedCount}
