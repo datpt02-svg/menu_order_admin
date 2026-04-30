@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowUpDown, Check, ChevronLeft, ChevronRight, Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowUpDown, Check, Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { Pagination } from "@/components/ui/pagination";
 
 type StaffItem = {
   id: number;
@@ -527,31 +528,13 @@ export function StaffContent({ initialData }: StaffContentProps) {
                 </tbody>
               </table>
             </div>
-            {orderedStaffList.length > 0 ? (
-              <div className="mt-4 flex items-center justify-between gap-3 border-t border-[color:rgba(63,111,66,0.08)] pt-4">
-                <p className="text-sm text-[var(--muted)]">
-                  Trang {visibleStaffPage} / {totalStaffPages}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={visibleStaffPage === 1}
-                    onClick={() => setStaffPage((current) => Math.max(1, current - 1))}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={visibleStaffPage === totalStaffPages}
-                    onClick={() => setStaffPage((current) => Math.min(totalStaffPages, current + 1))}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
+            {totalStaffPages > 1 ? (
+              <div className="mt-4 flex items-center justify-end border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+                <Pagination
+                  currentPage={visibleStaffPage}
+                  totalPages={totalStaffPages}
+                  onPageChange={setStaffPage}
+                />
               </div>
             ) : null}
           </CardContent>

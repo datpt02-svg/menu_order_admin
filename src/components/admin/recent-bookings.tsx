@@ -8,8 +8,10 @@ import { applyBookingFilters } from "@/lib/bookings";
 
 import { updateBookingStatusAction } from "@/app/(admin)/actions";
 import { BookingStatusDropdown, getBookingStatusOptions, type BookingStatus } from "@/components/admin/booking-status-dropdown";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldLabel, Input, Select } from "@/components/ui/field";
+import { Pagination } from "@/components/ui/pagination";
 import { SectionHeading } from "./section-heading";
 
 type BookingItem = {
@@ -66,9 +68,10 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
     key: "bookingDateTime",
     direction: "desc",
   });
+  const [page, setPage] = useState(1);
   const [, startTransition] = useTransition();
 
-  const RECENT_ROWS_MAX = 5;
+  const ROWS_PER_PAGE = 5;
 
   const bookingsWithOptimisticStatus = useMemo(() => bookings.map((booking) => ({
     ...booking,
@@ -99,7 +102,13 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
       if (current.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
       return { key, direction: key === "bookingDateTime" ? "desc" : "asc" };
     });
+    setPage(1);
   };
+
+  const totalPages = Math.max(1, Math.ceil(orderedBookings.length / ROWS_PER_PAGE));
+  const visiblePage = Math.min(page, totalPages);
+  const startIndex = (visiblePage - 1) * ROWS_PER_PAGE;
+  const paginatedBookings = orderedBookings.slice(startIndex, startIndex + ROWS_PER_PAGE);
 
   const updateBookingStatus = (id: number, status: BookingStatus) => {
     setStatusTargetId(id);
@@ -143,8 +152,8 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
     <Card>
       <CardContent>
         <SectionHeading
-          title="Booking gần nhất"
-          description="Danh sách mẫu để review nhanh trạng thái trước khi vào module booking đầy đủ."
+          title="Booking hôm nay"
+          description="Danh sách toàn bộ booking diễn ra trong ngày hôm nay."
         />
 
         <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -156,17 +165,26 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
                 className="pl-10"
                 placeholder="Mã, tên khách, SĐT"
                 value={keywordFilter}
-                onChange={(event) => setKeywordFilter(event.target.value)}
+                onChange={(event) => {
+                  setKeywordFilter(event.target.value);
+                  setPage(1);
+                }}
               />
             </div>
           </div>
           <div>
             <FieldLabel>Ngày</FieldLabel>
-            <Input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
+            <Input type="date" value={dateFilter} onChange={(event) => {
+              setDateFilter(event.target.value);
+              setPage(1);
+            }} />
           </div>
           <div>
             <FieldLabel>Trạng thái</FieldLabel>
-            <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as BookingStatus | "all")}>
+            <Select value={statusFilter} onChange={(event) => {
+              setStatusFilter(event.target.value as BookingStatus | "all");
+              setPage(1);
+            }}>
               <option value="all">Tất cả</option>
               {bookingStatusOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -203,7 +221,7 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
                       Không tìm thấy booking nào
                     </td>
                   </tr>
-                  {Array.from({ length: RECENT_ROWS_MAX - 1 }).map((_, i) => (
+                  {Array.from({ length: ROWS_PER_PAGE - 1 }).map((_, i) => (
                     <tr key={`phantom-empty-${i}`} aria-hidden="true">
                       <td className="py-4 pr-4"><span className="invisible">-</span></td>
                       <td className="py-4 pr-4"><div className="invisible">-</div><div className="invisible">-</div></td>
@@ -216,7 +234,7 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
                 </>
               ) : (
                 <>
-                  {orderedBookings.slice(0, RECENT_ROWS_MAX).map((booking) => (
+                  {paginatedBookings.map((booking) => (
                     <tr key={booking.id} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40">
                       <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)] break-all">{booking.code}</td>
                       <td className="py-4 pr-4 align-top">
@@ -251,7 +269,7 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
                       </td>
                     </tr>
                   ))}
-                  {Array.from({ length: Math.max(0, RECENT_ROWS_MAX - Math.min(orderedBookings.length, RECENT_ROWS_MAX)) }).map((_, i) => (
+                  {Array.from({ length: Math.max(0, ROWS_PER_PAGE - paginatedBookings.length) }).map((_, i) => (
                     <tr key={`phantom-${i}`} aria-hidden="true">
                       <td className="py-4 pr-4"><span className="invisible">-</span></td>
                       <td className="py-4 pr-4"><div className="invisible">-</div><div className="invisible">-</div></td>
@@ -266,6 +284,15 @@ export function RecentBookings({ bookings, zones }: RecentBookingsProps) {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 ? (
+          <div className="mt-4 flex items-center justify-end border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+            <Pagination
+              currentPage={visiblePage}
+              totalPages={totalPages}
+              onPageChange={setPage}
+            />
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

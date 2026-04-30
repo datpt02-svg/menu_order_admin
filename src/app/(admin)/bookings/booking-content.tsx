@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, Edit, Plus, Save, AlertTriangle, CheckCircle2, XCircle, Search, Calendar, Users, ReceiptText, ArrowUpDown } from "lucide-react";
+import { Download, Edit, Plus, Save, AlertTriangle, CheckCircle2, XCircle, Search, Calendar, Users, ReceiptText, ArrowUpDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldError, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { Pagination } from "@/components/ui/pagination";
 
 type DepositReviewStatus = "not_submitted" | "submitted" | "approved" | "rejected";
 
@@ -614,29 +615,15 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 </tbody>
               </table>
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3 border-t border-[color:rgba(63,111,66,0.08)] pt-4">
-              <p className="text-sm text-[var(--muted)]">Trang {visibleBookingPage} / {totalBookingPages}</p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={visibleBookingPage === 1}
-                  onClick={() => setBookingPage((current) => Math.max(1, current - 1))}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={visibleBookingPage === totalBookingPages}
-                  onClick={() => setBookingPage((current) => Math.min(totalBookingPages, current + 1))}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+            {totalBookingPages > 1 ? (
+              <div className="mt-4 flex items-center justify-end border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+                <Pagination
+                  currentPage={visibleBookingPage}
+                  totalPages={totalBookingPages}
+                  onPageChange={setBookingPage}
+                />
               </div>
-            </div>
+            ) : null}
           </CardContent>
         </Card>
 

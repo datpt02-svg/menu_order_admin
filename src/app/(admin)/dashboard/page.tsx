@@ -58,7 +58,8 @@ export default async function DashboardPage() {
       href: "/bookings",
     },
   ];
-  const recentBookings = snapshot.bookingList.slice(0, 5);
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysBookings = snapshot.bookingList.filter(b => b.bookingDate === today);
   const waiterFeed = snapshot.waiterList.slice(0, 4);
   return (
     <AdminShell
@@ -132,7 +133,7 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
 
-          <RecentBookings bookings={recentBookings} zones={zones} />
+          <RecentBookings bookings={todaysBookings} zones={zones} />
         </div>
 
         <div className="space-y-4">
