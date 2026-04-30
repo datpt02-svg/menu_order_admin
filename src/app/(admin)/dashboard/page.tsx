@@ -66,18 +66,6 @@ export default async function DashboardPage() {
       pathname="/dashboard"
       title="Tổng quan vận hành"
       description="Theo dõi booking, waiter requests và bàn/khu vực trong cùng một giao diện đồng bộ thương hiệu."
-      actions={
-        <>
-          <Button variant="outline">
-            <Download className="h-4 w-4" />
-            Xuất snapshot hôm nay
-          </Button>
-          <Button>
-            <Sparkles className="h-4 w-4" />
-            Tạo booking mới
-          </Button>
-        </>
-      }
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]">
         <div className="space-y-4">
