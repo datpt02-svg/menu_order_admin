@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Check, Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ArrowUpDown, Check, ChevronLeft, ChevronRight, Edit, Plus, Save, Trash2, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 
 import {
   deleteStaffAssignmentAction,
@@ -75,6 +76,10 @@ type StaffContentProps = {
 };
 
 type StaffStatus = "active" | "inactive";
+type StaffSortKey = "code" | "fullName" | "role" | "preferredZoneName" | "status";
+type SortDirection = "asc" | "desc";
+
+const STAFF_ROWS_PER_PAGE = 5;
 
 function getStaffStatusLabel(status: string): string {
   if (status === "active") return "Đang hoạt động";
@@ -100,23 +105,71 @@ function StaffStatusDropdown({
   onUpdate: (id: number, status: StaffStatus) => void;
 }) {
   const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const summaryRef = useRef<HTMLElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const updateMenuPosition = () => {
+    const trigger = summaryRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = Math.max(rect.width, 180);
+    const viewportPadding = 12;
+    const left = Math.min(
+      Math.max(viewportPadding, rect.right - menuWidth),
+      window.innerWidth - menuWidth - viewportPadding,
+    );
+
+    setMenuPosition({
+      top: rect.bottom + 8,
+      left,
+      width: menuWidth,
+    });
+  };
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const details = detailsRef.current;
-      if (!details?.open) return;
+      const menu = menuRef.current;
+      if (!isOpen || !details) return;
       if (event.target instanceof Node && details.contains(event.target)) return;
-      details.open = false;
+      if (event.target instanceof Node && menu?.contains(event.target)) return;
+      setIsOpen(false);
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
+  }, [isOpen]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    updateMenuPosition();
+
+    const handleViewportChange = () => updateMenuPosition();
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [isOpen]);
 
   const currentStatus = (staff.status === "active" || staff.status === "inactive") ? staff.status : "inactive";
 
   return (
-    <details ref={detailsRef} className="group relative shrink-0">
-      <summary className="list-none marker:hidden [&::-webkit-details-marker]:hidden">
+    <details ref={detailsRef} open={isOpen} className="relative shrink-0">
+      <summary
+        ref={summaryRef}
+        className="list-none marker:hidden [&::-webkit-details-marker]:hidden"
+        onClick={(event) => {
+          event.preventDefault();
+          if (isPending) return;
+          setIsOpen((current) => !current);
+        }}
+      >
         <Badge
           tone={getStaffStatusTone(currentStatus)}
           className={cn(
@@ -127,31 +180,38 @@ function StaffStatusDropdown({
           {getStaffStatusLabel(currentStatus)}
         </Badge>
       </summary>
-      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden min-w-[180px] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur group-open:block">
-        <div className="space-y-1">
-          {staffStatusOptions.map((option) => {
-            const isActive = option.value === currentStatus;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
-                  isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
-                )}
-                disabled={isPending || isActive}
-                onClick={() => {
-                  detailsRef.current?.removeAttribute("open");
-                  onUpdate(staff.id, option.value);
-                }}
-              >
-                <span>{option.label}</span>
-                {isActive ? <Check className="h-4 w-4" /> : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {isOpen && menuPosition ? createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[999] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur"
+          style={{ top: menuPosition.top, left: menuPosition.left, minWidth: `${menuPosition.width}px` }}
+        >
+          <div className="space-y-1">
+            {staffStatusOptions.map((option) => {
+              const isActive = option.value === currentStatus;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
+                    isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
+                  )}
+                  disabled={isPending || isActive}
+                  onClick={() => {
+                    setIsOpen(false);
+                    onUpdate(staff.id, option.value);
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {isActive ? <Check className="h-4 w-4" /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
+      ) : null}
     </details>
   );
 }
@@ -192,16 +252,27 @@ export function StaffContent({ initialData }: StaffContentProps) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [preferredZoneFilter, setPreferredZoneFilter] = useState("all");
+  const [staffPage, setStaffPage] = useState(1);
+  const [optimisticStaffStatuses, setOptimisticStaffStatuses] = useState<Record<number, StaffStatus>>({});
+  const [staffSortState, setStaffSortState] = useState<{ key: StaffSortKey; direction: SortDirection }>({
+    key: "code",
+    direction: "asc",
+  });
 
   const selectedZoneName = useMemo(
     () => zoneList.find((zone) => zone.slug === preferredZoneFilter)?.name ?? null,
     [preferredZoneFilter, zoneList],
   );
 
+  const displayedStaffList = useMemo(() => staffList.map((staff) => ({
+    ...staff,
+    status: optimisticStaffStatuses[staff.id] ?? staff.status,
+  })), [optimisticStaffStatuses, staffList]);
+
   const filteredStaffList = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
 
-    return staffList.filter((staff) => {
+    return displayedStaffList.filter((staff) => {
       const matchesKeyword =
         normalizedKeyword.length === 0 ||
         staff.fullName.toLowerCase().includes(normalizedKeyword) ||
@@ -215,7 +286,42 @@ export function StaffContent({ initialData }: StaffContentProps) {
 
       return matchesKeyword && matchesRole && matchesStatus && matchesPreferredZone;
     });
-  }, [keyword, preferredZoneFilter, roleFilter, selectedZoneName, staffList, statusFilter]);
+  }, [displayedStaffList, keyword, preferredZoneFilter, roleFilter, selectedZoneName, statusFilter]);
+
+  const orderedStaffList = useMemo(() => {
+    const direction = staffSortState.direction === "asc" ? 1 : -1;
+    return [...filteredStaffList].sort((left, right) => {
+      if (staffSortState.key === "code") return left.code.localeCompare(right.code, "vi", { numeric: true }) * direction;
+      if (staffSortState.key === "fullName") return left.fullName.localeCompare(right.fullName, "vi") * direction;
+      if (staffSortState.key === "role") return getRoleLabel(left.role).localeCompare(getRoleLabel(right.role), "vi") * direction;
+      if (staffSortState.key === "preferredZoneName") return (left.preferredZoneName ?? "Linh hoạt").localeCompare(right.preferredZoneName ?? "Linh hoạt", "vi") * direction;
+      return getStaffStatusLabel(left.status).localeCompare(getStaffStatusLabel(right.status), "vi") * direction;
+    });
+  }, [filteredStaffList, staffSortState]);
+
+  const totalStaffPages = Math.max(1, Math.ceil(orderedStaffList.length / STAFF_ROWS_PER_PAGE));
+  const visibleStaffPage = Math.min(staffPage, totalStaffPages);
+  const startIndex = (visibleStaffPage - 1) * STAFF_ROWS_PER_PAGE;
+  const paginatedStaffList = orderedStaffList.slice(startIndex, startIndex + STAFF_ROWS_PER_PAGE);
+
+  const handleStaffSort = (key: StaffSortKey) => {
+    setStaffSortState((current) => {
+      if (current.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+      return { key, direction: "asc" };
+    });
+    setStaffPage(1);
+  };
+
+  const renderStaffSortHeader = (label: string, key: StaffSortKey) => (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 text-left font-semibold text-[var(--muted)] transition hover:text-[var(--forest-dark)]"
+      onClick={() => handleStaffSort(key)}
+    >
+      <span>{label}</span>
+      <ArrowUpDown className={staffSortState.key === key ? "h-3.5 w-3.5 text-[var(--forest)]" : "h-3.5 w-3.5 opacity-60"} />
+    </button>
+  );
 
   const handleEdit = (type: "staff" | "shift" | "assignment", item: StaffItem | ShiftItem | AssignmentItem) => {
     setSelectedItem(item);
@@ -224,13 +330,23 @@ export function StaffContent({ initialData }: StaffContentProps) {
 
   const handleStatusUpdate = (id: number, status: StaffStatus) => {
     setStatusPendingId(id);
+    setOptimisticStaffStatuses((current) => ({ ...current, [id]: status }));
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append("id", String(id));
-      formData.append("active", status === "active" ? "true" : "");
-      await toggleStaffStatusAction(formData);
-      setStatusPendingId(null);
-      router.refresh();
+      try {
+        const formData = new FormData();
+        formData.append("id", String(id));
+        formData.append("active", status === "active" ? "true" : "");
+        await toggleStaffStatusAction(formData);
+        router.refresh();
+      } catch {
+        setOptimisticStaffStatuses((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+      } finally {
+        setStatusPendingId(null);
+      }
     });
   };
 
@@ -263,46 +379,6 @@ export function StaffContent({ initialData }: StaffContentProps) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardContent>
-          <SectionHeading title="Bộ lọc nhanh" description="Tập trung vào vai trò, trạng thái và khu vực ưu tiên để điều phối ca nhanh ngay trong nội bộ quán." />
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <FieldLabel>Từ khóa</FieldLabel>
-              <Input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tên / mã / số điện thoại" />
-            </div>
-            <div>
-              <FieldLabel>Vai trò</FieldLabel>
-              <Select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
-                <option value="all">Tất cả vai trò</option>
-                <option value="manager">Quản lý</option>
-                <option value="service">Phục vụ</option>
-                <option value="kitchen">Bếp</option>
-                <option value="cashier">Thu ngân</option>
-                <option value="support">Hỗ trợ</option>
-              </Select>
-            </div>
-            <div>
-              <FieldLabel>Trạng thái</FieldLabel>
-              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="all">Tất cả trạng thái</option>
-                <option value="active">Đang hoạt động</option>
-                <option value="inactive">Tạm nghỉ</option>
-              </Select>
-            </div>
-            <div>
-              <FieldLabel>Khu vực ưu tiên</FieldLabel>
-              <Select value={preferredZoneFilter} onChange={(event) => setPreferredZoneFilter(event.target.value)}>
-                <option value="all">Tất cả khu vực</option>
-                {zoneList.map((zone) => (
-                  <option key={zone.id} value={zone.slug}>{zone.name}</option>
-                ))}
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-4">
         {/* Block 1: Danh sách nhân viên */}
         <Card>
@@ -317,61 +393,167 @@ export function StaffContent({ initialData }: StaffContentProps) {
                 </Button>
               }
             />
-            <div className="mb-3 text-sm font-medium text-[var(--muted)]">
-              {filteredStaffList.length} / {staffList.length} nhân viên
+            <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <FieldLabel>Từ khóa</FieldLabel>
+                <Input
+                  value={keyword}
+                  onChange={(event) => {
+                    setKeyword(event.target.value);
+                    setStaffPage(1);
+                  }}
+                  placeholder="Tên / mã / số điện thoại"
+                />
+              </div>
+              <div>
+                <FieldLabel>Vai trò</FieldLabel>
+                <Select value={roleFilter} onChange={(event) => {
+                  setRoleFilter(event.target.value);
+                  setStaffPage(1);
+                }}>
+                  <option value="all">Tất cả vai trò</option>
+                  <option value="manager">Quản lý</option>
+                  <option value="service">Phục vụ</option>
+                  <option value="kitchen">Bếp</option>
+                  <option value="cashier">Thu ngân</option>
+                  <option value="support">Hỗ trợ</option>
+                </Select>
+              </div>
+              <div>
+                <FieldLabel>Trạng thái</FieldLabel>
+                <Select value={statusFilter} onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setStaffPage(1);
+                }}>
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="active">Đang hoạt động</option>
+                  <option value="inactive">Tạm nghỉ</option>
+                </Select>
+              </div>
+              <div>
+                <FieldLabel>Khu vực ưu tiên</FieldLabel>
+                <Select value={preferredZoneFilter} onChange={(event) => {
+                  setPreferredZoneFilter(event.target.value);
+                  setStaffPage(1);
+                }}>
+                  <option value="all">Tất cả khu vực</option>
+                  {zoneList.map((zone) => (
+                    <option key={zone.id} value={zone.slug}>{zone.name}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
             <div className="overflow-x-auto admin-scrollbar">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[12%]" />
+                  <col className="w-[24%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[12%]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-[color:var(--line)] text-left text-[var(--muted)]">
-                    <th className="pb-3 font-semibold">Mã</th>
-                    <th className="pb-3 font-semibold">Nhân viên</th>
-                    <th className="pb-3 font-semibold">Vai trò</th>
-                    <th className="pb-3 font-semibold">Khu vực ưu tiên</th>
-                    <th className="pb-3 font-semibold">Trạng thái</th>
-                    <th className="pb-3 font-semibold text-right">Thao tác</th>
+                    <th className="pb-3 pr-4 whitespace-nowrap">{renderStaffSortHeader("Mã", "code")}</th>
+                    <th className="pb-3 pr-4 whitespace-nowrap">{renderStaffSortHeader("Nhân viên", "fullName")}</th>
+                    <th className="pb-3 pr-4 whitespace-nowrap">{renderStaffSortHeader("Vai trò", "role")}</th>
+                    <th className="pb-3 pr-4 whitespace-nowrap">{renderStaffSortHeader("Khu vực ưu tiên", "preferredZoneName")}</th>
+                    <th className="pb-3 pr-4 whitespace-nowrap">{renderStaffSortHeader("Trạng thái", "status")}</th>
+                    <th className="pb-3 text-right font-semibold text-[var(--muted)] whitespace-nowrap">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStaffList.length > 0 ? (
-                    filteredStaffList.map((staff) => (
-                      <tr key={staff.id} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40">
-                        <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)]">{staff.code}</td>
-                        <td className="py-4 pr-4">
-                          <div className="font-semibold text-[var(--forest-dark)]">{staff.fullName}</div>
-                          <div className="text-[var(--muted)]">{staff.phone}</div>
-                        </td>
-                        <td className="py-4 pr-4 text-[var(--forest)]">{getRoleLabel(staff.role)}</td>
-                        <td className="py-4 pr-4 text-[var(--muted)]">{staff.preferredZoneName ?? "Linh hoạt"}</td>
-                        <td className="py-4">
-                          <StaffStatusDropdown
-                            staff={staff}
-                            isPending={statusPendingId === staff.id}
-                            onUpdate={handleStatusUpdate}
-                          />
-                        </td>
-                        <td className="py-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="icon-sm" onClick={() => handleEdit("staff", staff)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon-sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(staff.id, "staff")}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                  {paginatedStaffList.length > 0 ? (
+                    <>
+                      {paginatedStaffList.map((staff, idx) => (
+                        <tr key={staff.id} className={cn("border-b border-[color:rgba(63,111,66,0.08)] hover:bg-white/40", idx === paginatedStaffList.length - 1 && paginatedStaffList.length === STAFF_ROWS_PER_PAGE && "last:border-0")}>
+                          <td className="py-4 pr-4 align-top font-semibold text-[var(--forest-dark)] break-all">{staff.code}</td>
+                          <td className="py-4 pr-4 align-top min-w-0">
+                            <div className="break-words font-semibold text-[var(--forest-dark)]">{staff.fullName}</div>
+                            <div className="break-all text-[var(--muted)]">{staff.phone}</div>
+                          </td>
+                          <td className="py-4 pr-4 align-top text-[var(--forest)] whitespace-nowrap">{getRoleLabel(staff.role)}</td>
+                          <td className="py-4 pr-4 align-top text-[var(--muted)] break-words">{staff.preferredZoneName ?? "Linh hoạt"}</td>
+                          <td className="py-4 pr-4 align-top">
+                            <StaffStatusDropdown
+                              staff={staff}
+                              isPending={statusPendingId === staff.id}
+                              onUpdate={handleStatusUpdate}
+                            />
+                          </td>
+                          <td className="py-4 text-right align-top">
+                            <div className="flex min-w-[8.5rem] justify-end gap-2">
+                              <Button variant="ghost" size="icon-sm" onClick={() => handleEdit("staff", staff)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon-sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => confirmDelete(staff.id, "staff")}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {Array.from({ length: STAFF_ROWS_PER_PAGE - paginatedStaffList.length }).map((_, i) => (
+                        <tr key={`phantom-${i}`} aria-hidden="true" className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0">
+                          <td className="py-4 pr-4 align-top"><span className="invisible">-</span></td>
+                          <td className="py-4 pr-4 align-top min-w-0"><div className="invisible">-</div><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4 align-top" />
+                          <td className="py-4 pr-4 align-top" />
+                          <td className="py-4 pr-4 align-top" />
+                          <td className="py-4 align-top" />
+                        </tr>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <tr>
+                        <td colSpan={6} className="py-4 text-center text-sm text-[var(--muted)]">
+                          Không có nhân viên nào khớp bộ lọc hiện tại.
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-sm text-[var(--muted)]">
-                        Không có nhân viên nào khớp bộ lọc hiện tại.
-                      </td>
-                    </tr>
+                      {Array.from({ length: STAFF_ROWS_PER_PAGE - 1 }).map((_, i) => (
+                        <tr key={`phantom-empty-${i}`} aria-hidden="true" className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0">
+                          <td className="py-4 pr-4 align-top"><span className="invisible">-</span></td>
+                          <td className="py-4 pr-4 align-top min-w-0"><div className="invisible">-</div><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4 align-top" />
+                          <td className="py-4 pr-4 align-top" />
+                          <td className="py-4 pr-4 align-top" />
+                          <td className="py-4 align-top" />
+                        </tr>
+                      ))}
+                    </>
                   )}
                 </tbody>
               </table>
             </div>
+            {orderedStaffList.length > 0 ? (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+                <p className="text-sm text-[var(--muted)]">
+                  Trang {visibleStaffPage} / {totalStaffPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={visibleStaffPage === 1}
+                    onClick={() => setStaffPage((current) => Math.max(1, current - 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={visibleStaffPage === totalStaffPages}
+                    onClick={() => setStaffPage((current) => Math.min(totalStaffPages, current + 1))}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

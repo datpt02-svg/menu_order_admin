@@ -1,12 +1,14 @@
 import { unstable_noStore as noStore } from "next/cache";
+import Link from "next/link";
 import { ArrowUpRight, Download, Sparkles } from "lucide-react";
 
 import { AdminShell } from "@/components/admin/admin-shell";
+import { RecentBookings } from "@/components/admin/recent-bookings";
 import { SectionHeading } from "@/components/admin/section-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { safeDashboardSnapshot } from "@/lib/server/safe-data";
+import { safeDashboardSnapshot, safeZones } from "@/lib/server/safe-data";
 
 function getBookingTone(status: string) {
   if (status === "pending") return "warning" as const;
@@ -22,31 +24,38 @@ function getWaiterTone(status: string) {
 
 export default async function DashboardPage() {
   noStore();
-  const snapshot = await safeDashboardSnapshot();
+  const [snapshot, { data: zones }] = await Promise.all([
+    safeDashboardSnapshot(),
+    safeZones(),
+  ]);
   const summaryCards = [
     {
       title: "Booking hôm nay",
       value: snapshot.stats.bookingsToday.toString(),
       change: `${snapshot.bookingList.length} booking toàn hệ thống`,
       hint: "Đếm từ dữ liệu lịch hiện tại và tự fallback nếu PostgreSQL chưa sẵn sàng.",
+      href: "/bookings",
     },
     {
       title: "Yêu cầu đang mở",
       value: snapshot.stats.waiterOpen.toString(),
       change: `${snapshot.waiterList.length} yêu cầu gần nhất`,
       hint: "Ưu tiên các bàn còn trạng thái new hoặc in_progress để điều phối phục vụ.",
+      href: "/waiter-requests",
     },
     {
       title: "Bàn đang bận",
       value: snapshot.stats.occupiedTables.toString(),
       change: `${snapshot.tableList.length} bàn trong sơ đồ`,
       hint: "Kết hợp với calendar để nhìn nhanh mật độ lấp đầy theo khung giờ.",
+      href: "/tables",
     },
     {
       title: "Tổng booking gần đây",
       value: snapshot.bookingList.length.toString(),
       change: `${snapshot.timeline.length} mốc sắp đến giờ`,
       hint: "Dùng chỉ số này để nhìn nhanh lượng việc đang chờ xử lý trong ngày và ca kế tiếp.",
+      href: "/bookings",
     },
   ];
   const recentBookings = snapshot.bookingList.slice(0, 5);
@@ -73,21 +82,23 @@ export default async function DashboardPage() {
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {summaryCards.map((card) => (
-              <Card key={card.title}>
-                <CardContent>
-                  <div className="text-sm font-semibold text-[var(--muted)]">{card.title}</div>
-                  <div className="mt-3 flex items-end justify-between gap-4">
-                    <div>
-                      <div className="text-3xl font-extrabold text-[var(--forest-dark)]">{card.value}</div>
-                      <div className="mt-2 text-sm font-semibold text-[var(--forest)]">{card.change}</div>
+              <Link key={card.title} href={card.href} className="group">
+                <Card className="h-full cursor-pointer transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_12px_24px_rgba(45,82,44,0.12)]">
+                  <CardContent>
+                    <div className="text-sm font-semibold text-[var(--muted)]">{card.title}</div>
+                    <div className="mt-3 flex items-end justify-between gap-4">
+                      <div>
+                        <div className="text-3xl font-extrabold text-[var(--forest-dark)]">{card.value}</div>
+                        <div className="mt-2 text-sm font-semibold text-[var(--forest)]">{card.change}</div>
+                      </div>
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-[var(--forest)] shadow-[0_8px_18px_rgba(45,82,44,0.08)] transition-all duration-200 group-hover:shadow-[0_12px_22px_rgba(45,82,44,0.12)]">
+                        <ArrowUpRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-[1px] group-hover:-translate-y-[1px]" />
+                      </span>
                     </div>
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-[var(--forest)] shadow-[0_8px_18px_rgba(45,82,44,0.08)]">
-                      <ArrowUpRight className="h-5 w-5" />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{card.hint}</p>
-                </CardContent>
-              </Card>
+                    <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{card.hint}</p>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
 
@@ -109,52 +120,19 @@ export default async function DashboardPage() {
                         <div className="mt-1 text-sm text-[var(--muted)]">{item.detail}</div>
                       </div>
                     </div>
-                    <Button variant="ghost" className="justify-start md:justify-center">Mở chi tiết</Button>
+                    <Link
+                      href={`/bookings?bookingId=${item.bookingId}`}
+                      className="inline-flex items-center rounded-[var(--radius-pill)] font-semibold transition-all duration-200 enabled:cursor-pointer enabled:hover:-translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(110,149,101,0.28)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-60 bg-transparent text-[var(--forest)] hover:bg-white/45 hover:shadow-[0_10px_18px_rgba(45,82,44,0.1)] min-h-11 px-4 text-sm gap-2 justify-start md:justify-center"
+                    >
+                      Mở chi tiết
+                    </Link>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent>
-              <SectionHeading
-                title="Booking gần nhất"
-                description="Danh sách mẫu để review nhanh trạng thái trước khi vào module booking đầy đủ."
-              />
-              <div className="overflow-x-auto admin-scrollbar">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[color:var(--line)] text-left text-[var(--muted)]">
-                      <th className="pb-3 font-semibold">Mã</th>
-                      <th className="pb-3 font-semibold">Khách</th>
-                      <th className="pb-3 font-semibold">Giờ</th>
-                      <th className="pb-3 font-semibold">Bàn</th>
-                      <th className="pb-3 font-semibold">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentBookings.map((booking) => (
-                      <tr key={booking.id} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0">
-                        <td className="py-3 pr-4 font-semibold text-[var(--forest-dark)]">{booking.code}</td>
-                        <td className="py-3 pr-4">
-                          <div className="font-semibold text-[var(--forest-dark)]">{booking.customerName}</div>
-                          <div className="text-[var(--muted)]">{booking.customerPhone}</div>
-                        </td>
-                        <td className="py-3 pr-4 text-[var(--forest)]">{booking.bookingDate} · {booking.bookingTime}</td>
-                        <td className="py-3 pr-4 text-[var(--muted)]">{booking.zoneName ?? "Chưa gán khu"} / {booking.tableCode ?? "Chưa gán bàn"}</td>
-                        <td className="py-3">
-                          <Badge tone={getBookingTone(booking.status)}>
-                            {booking.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <RecentBookings bookings={recentBookings} zones={zones} />
         </div>
 
         <div className="space-y-4">

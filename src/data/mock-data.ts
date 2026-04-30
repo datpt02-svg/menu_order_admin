@@ -191,16 +191,19 @@ export const localeRows = [
 
 export const upcomingTimeline = [
   {
+    bookingId: 1,
     time: "18:30",
     title: "Nguyễn Anh Tú - BBQ Deck A / A-03",
     detail: "4 khách · đã xác nhận · cần view hồ",
   },
   {
+    bookingId: 2,
     time: "19:00",
     title: "Lê Minh Hằng - Cafe Garden / C-08",
     detail: "2 khách · chờ xác nhận bill",
   },
   {
+    bookingId: 3,
     time: "20:00",
     title: "Trần Quốc Bảo - BBQ Deck B / B-02",
     detail: "6 khách · đã check-in",

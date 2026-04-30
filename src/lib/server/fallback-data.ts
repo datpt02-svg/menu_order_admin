@@ -219,6 +219,7 @@ function buildFallbackServices() {
 
 function buildFallbackTimeline(bookingList: ReturnType<typeof buildFallbackBookingList>) {
   const sortedTimeline = bookingList.slice(0, 3).map((booking) => ({
+    bookingId: booking.id,
     time: booking.bookingTime,
     title: `${booking.customerName} - ${booking.zoneName ?? "Chưa gán khu"} / ${booking.tableCode ?? "Chưa gán bàn"}`,
     detail: `${booking.guestCount} khách · ${booking.status}`,

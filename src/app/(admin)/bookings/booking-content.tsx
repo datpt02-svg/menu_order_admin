@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import { Check, Download, Edit, Plus, Save, AlertTriangle, CheckCircle2, XCircle, Search, Calendar, Users, ReceiptText, ArrowUpDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Edit, Plus, Save, AlertTriangle, CheckCircle2, XCircle, Search, Calendar, Users, ReceiptText, ArrowUpDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { deleteBookingAction, reviewBookingDepositAction, saveBookingAction, updateBookingStatusAction } from "@/app/(admin)/actions";
+import { BookingStatusDropdown, getBookingStatusOptions, getBookingStatusValue, type BookingStatus } from "@/components/admin/booking-status-dropdown";
 import { ClearHighlightQuery } from "@/components/admin/clear-highlight-query";
 import { RealtimeSync } from "@/components/admin/realtime-sync";
 import { SectionHeading } from "@/components/admin/section-heading";
@@ -27,7 +28,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FieldError, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 
-type BookingStatus = "pending" | "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
 type DepositReviewStatus = "not_submitted" | "submitted" | "approved" | "rejected";
 
 type BookingItem = {
@@ -68,23 +68,6 @@ type ActionValidationResult = {
   fieldErrors?: Record<string, string>;
   formError?: string;
 };
-
-const bookingStatusOptions: Array<{ value: BookingStatus; label: string }> = [
-  { value: "pending", label: getBookingStatusLabel("pending") },
-  { value: "confirmed", label: getBookingStatusLabel("confirmed") },
-  { value: "seated", label: getBookingStatusLabel("seated") },
-  { value: "completed", label: getBookingStatusLabel("completed") },
-  { value: "cancelled", label: getBookingStatusLabel("cancelled") },
-  { value: "no_show", label: getBookingStatusLabel("no_show") },
-];
-
-function isBookingStatus(value: string): value is BookingStatus {
-  return ["pending", "confirmed", "seated", "completed", "cancelled", "no_show"].includes(value);
-}
-
-function getBookingStatusValue(value: string): BookingStatus {
-  return isBookingStatus(value) ? value : "pending";
-}
 
 function getBookingStatusText(value: string) {
   return getBookingStatusLabel(getBookingStatusValue(value));
@@ -159,95 +142,11 @@ function getApprovedDepositCount(bookings: BookingItem[]) {
   return bookings.filter((booking) => getDepositStatusValue(booking.depositReviewStatus) === "approved").length;
 }
 
-const bookingStatusToneMap: Record<BookingStatus, "warning" | "success" | "info" | "danger" | "default"> = {
-  pending: "warning",
-  confirmed: "success",
-  seated: "info",
-  completed: "success",
-  cancelled: "danger",
-  no_show: "danger",
-};
-
-function BookingStatusDropdown({
-  booking,
-  isStatusPending,
-  onUpdate,
-}: {
-  booking: BookingItem;
-  isStatusPending: boolean;
-  onUpdate: (id: number, status: BookingStatus) => void;
-}) {
-  const detailsRef = useRef<HTMLDetailsElement | null>(null);
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const details = detailsRef.current;
-      if (!details?.open) return;
-      if (event.target instanceof Node && details.contains(event.target)) return;
-      details.open = false;
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
-
-  const currentStatus = getBookingStatusValue(booking.status);
-
-  return (
-    <details ref={detailsRef} className="group relative shrink-0">
-      <summary className="list-none marker:hidden [&::-webkit-details-marker]:hidden">
-        <Badge
-          tone={bookingStatusToneMap[currentStatus]}
-          className={cn(
-            "cursor-pointer transition-opacity duration-200 hover:opacity-90 whitespace-nowrap",
-            isStatusPending && "pointer-events-none opacity-60",
-          )}
-        >
-          {getBookingStatusLabel(currentStatus)}
-        </Badge>
-      </summary>
-      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 hidden min-w-[180px] rounded-[20px] border border-[color:var(--line)] bg-[rgba(255,255,255,0.96)] p-2 shadow-[0_18px_36px_rgba(24,51,33,0.16)] backdrop-blur group-open:block">
-        <div className="space-y-1">
-          {bookingStatusOptions.map((option) => {
-            const isActive = option.value === currentStatus;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm font-semibold text-[var(--forest-dark)] transition-colors duration-200",
-                  isActive ? "bg-[rgba(63,111,66,0.10)] text-[var(--forest)]" : "hover:bg-[var(--panel)]",
-                )}
-                disabled={isStatusPending || isActive}
-                onClick={() => {
-                  detailsRef.current?.removeAttribute("open");
-                  onUpdate(booking.id, option.value);
-                }}
-              >
-                <span>{option.label}</span>
-                {isActive ? <Check className="h-4 w-4" /> : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </details>
-  );
-}
-
-function getSortSummaryLabel(sortState: BookingSortState) {
-  if (sortState.key === "attention") return "Ưu tiên xử lý";
-  if (sortState.key === "code") return "Mã";
-  if (sortState.key === "customerName") return "Khách";
-  if (sortState.key === "guestCount") return "Số khách";
-  if (sortState.key === "zoneTable") return "Khu vực / Bàn";
-  if (sortState.key === "status") return "Trạng thái";
-  if (sortState.key === "depositReviewStatus") return "Bill cọc";
-  return "Ngày giờ";
-}
 
 export function BookingContent({ initialData, highlightedBookingId }: BookingContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const bookingStatusOptions = getBookingStatusOptions();
   const [isPending, startTransition] = useTransition();
   const [activeHighlightId, setActiveHighlightId] = useState<number | undefined>(highlightedBookingId);
   const [keywordFilter, setKeywordFilter] = useState("");
@@ -255,6 +154,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
   const [zoneFilter, setZoneFilter] = useState("all");
   const [sortState, setSortState] = useState<BookingSortState>({ key: "bookingDateTime", direction: "desc" });
+  const [bookingPage, setBookingPage] = useState(1);
   const [statusTargetId, setStatusTargetId] = useState<number | null>(null);
   const [statusFormError, setStatusFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -267,6 +167,8 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
 
   const bookings = initialData.bookings;
   const zones = initialData.zones;
+
+  const BOOKING_ROWS_PER_PAGE = 5;
 
   const filteredBookings = useMemo(() => applyBookingFilters(bookings, zones, {
     keyword: keywordFilter,
@@ -281,6 +183,12 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
       depositReviewStatus: getDepositStatusValue(booking.depositReviewStatus),
     })), sortState) as BookingItem[];
   }, [filteredBookings, sortState]);
+
+  const totalBookingPages = Math.max(1, Math.ceil(orderedBookings.length / BOOKING_ROWS_PER_PAGE));
+  const visibleBookingPage = Math.min(bookingPage, totalBookingPages);
+  const bookingStartIndex = (visibleBookingPage - 1) * BOOKING_ROWS_PER_PAGE;
+  const paginatedBookings = orderedBookings.slice(bookingStartIndex, bookingStartIndex + BOOKING_ROWS_PER_PAGE);
+  const emptyBookingRows = Math.max(0, BOOKING_ROWS_PER_PAGE - paginatedBookings.length);
 
   const pendingDepositCount = useMemo(() => getPendingDepositCount(bookings), [bookings]);
   const approvedDepositCount = useMemo(() => getApprovedDepositCount(bookings), [bookings]);
@@ -326,6 +234,21 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
     return () => window.clearTimeout(timer);
   }, [bookings, requestedDepositReviewBookingId, shouldOpenDepositFromQuery]);
 
+  // Auto-open modal when navigated from dashboard with highlightedBookingId
+  useEffect(() => {
+    if (!highlightedBookingId) return;
+    const booking = bookings.find((item) => item.id === highlightedBookingId);
+    if (!booking) return;
+    const timer = window.setTimeout(() => {
+      setFieldErrors({});
+      setFormError(null);
+      setActiveHighlightId(highlightedBookingId);
+      setSelectedBooking(booking);
+      setIsModalOpen(true);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [bookings, highlightedBookingId]);
+
   const assignRowRef = (id: number) => (node: HTMLTableRowElement | null) => {
     rowRefs.current[id] = node;
   };
@@ -350,6 +273,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
       if (current.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
       return { key, direction: key === "bookingDateTime" ? "desc" : "asc" };
     });
+    setBookingPage(1);
   };
 
   const renderSortHeader = (label: string, key: BookingSortKey, className?: string) => (
@@ -496,27 +420,26 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                     className="pl-10"
                     placeholder="Mã booking, tên khách, SĐT"
                     value={keywordFilter}
-                    onChange={(event) => setKeywordFilter(event.target.value)}
+                    onChange={(event) => { setKeywordFilter(event.target.value); setBookingPage(1); }}
                   />
                 </div>
               </div>
               <div>
                 <FieldLabel>Ngày</FieldLabel>
-                <Input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} />
+                <Input type="date" value={dateFilter} onChange={(event) => { setDateFilter(event.target.value); setBookingPage(1); }} />
               </div>
               <div>
                 <FieldLabel>Trạng thái</FieldLabel>
-                <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as BookingStatus | "all")}>
+                <Select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as BookingStatus | "all"); setBookingPage(1); }}>
                   <option value="all">Tất cả</option>
                   {bookingStatusOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </Select>
-                <div className="mt-2 text-xs text-[var(--muted)]">Đang sắp xếp theo {getSortSummaryLabel(sortState)} · {sortState.direction === "asc" ? "tăng dần" : "giảm dần"}</div>
               </div>
               <div>
                 <FieldLabel>Khu vực</FieldLabel>
-                <Select value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value)}>
+                <Select value={zoneFilter} onChange={(event) => { setZoneFilter(event.target.value); setBookingPage(1); }}>
                   <option value="all">Tất cả khu vực</option>
                   {zones.map((zone) => (
                     <option key={zone.id} value={zone.slug}>{zone.name}</option>
@@ -547,15 +470,24 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
             />
             <div className="overflow-x-auto admin-scrollbar">
               <table className="min-w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[9rem]" />
+                  <col className="w-[14rem]" />
+                  <col className="w-[8rem]" />
+                  <col className="w-[11rem]" />
+                  <col className="w-[15rem]" />
+                  <col className="w-[12rem]" />
+                  <col className="w-[10rem]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-[color:var(--line)] text-left text-[var(--muted)]">
-                    <th className="w-[9rem] pb-3 pr-4">{renderSortHeader("Mã", "code")}</th>
-                    <th className="w-[14rem] pb-3 pr-4">{renderSortHeader("Khách", "customerName")}</th>
-                    <th className="w-[8rem] pb-3 pr-4">{renderSortHeader("Số khách", "guestCount")}</th>
-                    <th className="w-[11rem] pb-3 pr-4">{renderSortHeader("Ngày giờ", "bookingDateTime")}</th>
-                    <th className="w-[15rem] pb-3 pr-4">{renderSortHeader("Khu vực / Bàn", "zoneTable")}</th>
-                    <th className="w-[12rem] pb-3 pr-4">{renderSortHeader("Trạng thái", "status")}</th>
-                    <th className="w-[10rem] pb-3 text-right font-semibold text-[var(--muted)]">Thao tác</th>
+                    <th className="pb-3 pr-4">{renderSortHeader("Mã", "code")}</th>
+                    <th className="pb-3 pr-4">{renderSortHeader("Khách", "customerName")}</th>
+                    <th className="pb-3 pr-4">{renderSortHeader("Số khách", "guestCount")}</th>
+                    <th className="pb-3 pr-4">{renderSortHeader("Ngày giờ", "bookingDateTime")}</th>
+                    <th className="pb-3 pr-4">{renderSortHeader("Khu vực / Bàn", "zoneTable")}</th>
+                    <th className="pb-3 pr-4">{renderSortHeader("Trạng thái", "status")}</th>
+                    <th className="pb-3 text-right font-semibold text-[var(--muted)]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -568,87 +500,142 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                       </td>
                     </tr>
                   ) : null}
-                  {orderedBookings.map((booking) => {
-                    const reviewTime = formatDepositReviewTime(booking.depositReviewedAt);
-                    const isStatusPending = isPending && statusTargetId === booking.id;
-                    return (
-                      <tr
-                        key={booking.id}
-                        ref={assignRowRef(booking.id)}
-                        className={cn(
-                          "border-b border-[color:rgba(63,111,66,0.08)] last:border-0 hover:bg-white/40",
-                          activeHighlightId === booking.id && getBookingHighlightTone(),
-                        )}
-                      >
-                        <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)]">{booking.code}</td>
-                        <td className="py-4 pr-4 align-top">
-                          <div className="break-words font-semibold text-[var(--forest-dark)]">{booking.customerName}</div>
-                          <div className="break-all text-[var(--muted)]">{booking.customerPhone}</div>
-                        </td>
-                        <td className="py-4 pr-4 align-top">
-                          <div className="flex items-center gap-1.5 font-semibold text-[var(--forest)]">
-                            <Users className="h-3.5 w-3.5" />
-                            {booking.guestCount}
-                          </div>
-                        </td>
-                        <td className="py-4 pr-4 align-top text-[var(--muted)]">
-                          <div className="flex items-center gap-1.5 whitespace-nowrap">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {booking.bookingDate}
-                          </div>
-                          <div className="ml-5 whitespace-nowrap">{booking.bookingTime}</div>
-                        </td>
-                        <td className="py-4 pr-4 align-top text-[var(--muted)]">
-                          <div className="break-words">
-                            {getBookingZoneFallback(booking.zoneName)} / <span className="font-semibold text-[var(--forest-dark)]">{getBookingTableFallback(booking.tableCode)}</span>
-                          </div>
-                          <div className="mt-2">
-                            <Badge tone={getDepositTone(booking.depositReviewStatus)} className="whitespace-nowrap">{getDepositLabel(booking.depositReviewStatus)}</Badge>
-                          </div>
-                          {(getDepositStatusValue(booking.depositReviewStatus) === "rejected" || getDepositStatusValue(booking.depositReviewStatus) === "approved") && reviewTime ? (
-                            <div className="mt-2 text-xs text-[var(--muted)]">{reviewTime}</div>
-                          ) : null}
-                          {getDepositStatusValue(booking.depositReviewStatus) === "rejected" && booking.depositReviewNote ? (
-                            <div className="mt-2 break-words text-xs text-[#8a3527]">{booking.depositReviewNote}</div>
-                          ) : null}
-                        </td>
-                        <td className="py-4 pr-4 align-top">
-                          <BookingStatusDropdown
-                            booking={booking}
-                            isStatusPending={isStatusPending}
-                            onUpdate={updateBookingStatus}
-                          />
-                        </td>
-                        <td className="py-4 text-right align-top">
-                          <div className="flex min-w-[8.5rem] justify-end gap-2">
-                            {canOpenDepositBill(booking) ? (
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                className="text-[#8c6d1f] hover:bg-[rgba(185,140,42,0.1)]"
-                                onClick={() => openDepositBill(booking)}
-                              >
-                                <ReceiptText className="h-4 w-4" />
-                              </Button>
-                            ) : null}
-                            <Button variant="ghost" size="icon-sm" onClick={() => handleEdit(booking)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                              onClick={() => confirmCancel(booking.id)}
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {paginatedBookings.length > 0 ? (
+                    <>
+                      {paginatedBookings.map((booking, idx) => {
+                        const reviewTime = formatDepositReviewTime(booking.depositReviewedAt);
+                        const isStatusPending = isPending && statusTargetId === booking.id;
+                        return (
+                          <tr
+                            key={booking.id}
+                            ref={assignRowRef(booking.id)}
+                            className={cn(
+                              "border-b border-[color:rgba(63,111,66,0.08)] hover:bg-white/40",
+                              idx === paginatedBookings.length - 1 && emptyBookingRows === 0 && "last:border-0",
+                              activeHighlightId === booking.id && getBookingHighlightTone(),
+                            )}
+                          >
+                            <td className="py-4 pr-4 font-semibold text-[var(--forest-dark)] break-all">{booking.code}</td>
+                            <td className="py-4 pr-4 align-top">
+                              <div className="break-words font-semibold text-[var(--forest-dark)]">{booking.customerName}</div>
+                              <div className="break-all text-[var(--muted)]">{booking.customerPhone}</div>
+                            </td>
+                            <td className="py-4 pr-4 align-top">
+                              <div className="flex items-center gap-1.5 font-semibold text-[var(--forest)]">
+                                <Users className="h-3.5 w-3.5" />
+                                {booking.guestCount}
+                              </div>
+                            </td>
+                            <td className="py-4 pr-4 align-top text-[var(--muted)]">
+                              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {booking.bookingDate}
+                              </div>
+                              <div className="ml-5 whitespace-nowrap">{booking.bookingTime}</div>
+                            </td>
+                            <td className="py-4 pr-4 align-top text-[var(--muted)]">
+                              <div className="break-words">
+                                {getBookingZoneFallback(booking.zoneName)} / <span className="font-semibold text-[var(--forest-dark)]">{getBookingTableFallback(booking.tableCode)}</span>
+                              </div>
+                              <div className="mt-2">
+                                <Badge tone={getDepositTone(booking.depositReviewStatus)} className="whitespace-nowrap">{getDepositLabel(booking.depositReviewStatus)}</Badge>
+                              </div>
+                              {(getDepositStatusValue(booking.depositReviewStatus) === "rejected" || getDepositStatusValue(booking.depositReviewStatus) === "approved") && reviewTime ? (
+                                <div className="mt-2 text-xs text-[var(--muted)]">{reviewTime}</div>
+                              ) : null}
+                              {getDepositStatusValue(booking.depositReviewStatus) === "rejected" && booking.depositReviewNote ? (
+                                <div className="mt-2 break-words text-xs text-[#8a3527]">{booking.depositReviewNote}</div>
+                              ) : null}
+                            </td>
+                            <td className="py-4 pr-4 align-top">
+                              <BookingStatusDropdown
+                                bookingId={booking.id}
+                                status={booking.status}
+                                isStatusPending={isStatusPending}
+                                onUpdate={updateBookingStatus}
+                              />
+                            </td>
+                            <td className="py-4 text-right align-top">
+                              <div className="flex min-w-[8.5rem] justify-end gap-2">
+                                {canOpenDepositBill(booking) ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="text-[#8c6d1f] hover:bg-[rgba(185,140,42,0.1)]"
+                                    onClick={() => openDepositBill(booking)}
+                                  >
+                                    <ReceiptText className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
+                                <Button variant="ghost" size="icon-sm" onClick={() => handleEdit(booking)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                  onClick={() => confirmCancel(booking.id)}
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {Array.from({ length: emptyBookingRows }).map((_, index) => (
+                        <tr key={`booking-empty-${visibleBookingPage}-${index}`} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0" aria-hidden="true">
+                          <td className="py-4 pr-4"><span className="invisible">-</span></td>
+                          <td className="py-4 pr-4"><div className="invisible">-</div><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4"><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4"><div className="invisible">-</div><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4">
+                            <div className="invisible">-</div>
+                            <div className="invisible mt-2"><Badge>Fake</Badge></div>
+                          </td>
+                          <td className="py-4 pr-4">
+                            <div className="invisible h-9">-</div>
+                          </td>
+                          <td className="py-4 pr-4 text-right">
+                            <div className="invisible flex justify-end gap-2">
+                              <Button variant="ghost" size="icon-sm">-</Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="py-4 text-center text-sm text-[var(--muted)]">
+                        Không tìm thấy booking nào khớp bộ lọc hiện tại.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-[color:rgba(63,111,66,0.08)] pt-4">
+              <p className="text-sm text-[var(--muted)]">Trang {visibleBookingPage} / {totalBookingPages}</p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={visibleBookingPage === 1}
+                  onClick={() => setBookingPage((current) => Math.max(1, current - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={visibleBookingPage === totalBookingPages}
+                  onClick={() => setBookingPage((current) => Math.min(totalBookingPages, current + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
