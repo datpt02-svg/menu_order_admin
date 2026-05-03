@@ -12,7 +12,6 @@ Admin app cho booking, services, locales và vận hành quán, chạy bằng Ne
 ```bash
 npm run db:generate
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
@@ -28,7 +27,7 @@ docker compose up --build
 
 Flow khởi động:
 - `postgres`: khởi động database
-- `setup`: chờ database healthy, sau đó chạy `db:generate`, `db:migrate`, `db:seed`
+- `setup`: chờ database healthy, sau đó chạy `db:generate`, `db:migrate`
 - `admin`: chỉ khởi động sau khi `setup` thành công
 
 App sẽ chạy tại `http://localhost:3000`.
@@ -128,6 +127,8 @@ npm run db:migrate
 npm run db:seed
 npm run db:setup
 npm run build
+
+`db:seed` vẫn tồn tại để chạy tay khi thật sự cần nạp dữ liệu mẫu.
 ```
 
 ## Production note

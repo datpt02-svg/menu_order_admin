@@ -33,7 +33,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["sh", "-lc", "npm run db:generate && npm run db:migrate && npm run db:seed"]
+    command: ["sh", "-lc", "npm run db:setup"]
     volumes:
       - ./:/app
       - /app/node_modules

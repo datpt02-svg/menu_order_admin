@@ -19,7 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FieldLabel, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-import { cn, formatDate, toDateStringICT } from "@/lib/utils";
+import { addMinutesToCalendarDateTime, buildCalendarDateTime, formatDate, getCalendarDateTimeParts } from "@/lib/utils";
 
 type BookingItem = {
   id: number;
@@ -142,11 +142,6 @@ type StaffCalendarSurfaceProps = {
   isExpanded?: boolean;
 };
 
-function addNinetyMinutes(date: string, time: string) {
-  const start = new Date(`${date}T${time}:00`);
-  return new Date(start.getTime() + 90 * 60 * 1000).toISOString();
-}
-
 function getStatusTone(status: string) {
   if (status === "pending" || status === "assigned") return "warning" as const;
   if (status === "confirmed") return "success" as const;
@@ -204,7 +199,7 @@ function StaffCalendarSurface({
   isExpanded = false,
 }: StaffCalendarSurfaceProps) {
   return (
-    <div className={`calendar-surface ${isExpanded ? "calendar-surface--expanded " : ""}overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ${isExpanded ? "h-full p-3 md:p-4" : "p-4"}`}>
+    <div className={`calendar-surface ${isExpanded ? "calendar-surface--expanded flex h-full min-h-0 flex-col " : ""}overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ${isExpanded ? "p-3 md:p-4" : "p-4"}`}>
       {showExpandControl ? (
         <div className="calendar-expand-control">
           <Button
@@ -425,7 +420,6 @@ export function StaffCalendar({
   const previousAssignmentIdsRef = useRef<string>(assignmentList.map((assignment) => assignment.id).join(","));
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calendarApiRef = useRef<CalendarApi | null>(null);
-  const calendarViewportStateRef = useRef<CalendarViewportState | null>(null);
   const [calendarViewportState, setCalendarViewportState] = useState<CalendarViewportState>({
     currentDate: new Date(),
     currentView: "timeGridWeek",
@@ -479,8 +473,8 @@ export function StaffCalendar({
     const bookingEvents = calendarViewMode !== "staff" ? filteredBookings.map((booking) => ({
       id: `booking-${booking.id}`,
       title: `${booking.customerName} · ${booking.tableCode ?? "Chưa gán bàn"}`,
-      start: `${booking.bookingDate}T${booking.bookingTime}:00`,
-      end: addNinetyMinutes(booking.bookingDate, booking.bookingTime),
+      start: buildCalendarDateTime(booking.bookingDate, booking.bookingTime),
+      end: addMinutesToCalendarDateTime(booking.bookingDate, booking.bookingTime, 90),
       classNames: ["booking-event"],
       extendedProps: {
         entityType: "booking",
@@ -491,8 +485,8 @@ export function StaffCalendar({
     const assignmentEvents = calendarViewMode !== "booking" ? filteredAssignments.map((assignment) => ({
       id: `assignment-${assignment.id}`,
       title: `${assignment.staffFullName} · ${assignment.assignmentRole ?? assignment.staffRole}`,
-      start: `${assignment.shiftDate}T${assignment.startTime}:00`,
-      end: `${assignment.shiftDate}T${assignment.endTime}:00`,
+      start: buildCalendarDateTime(assignment.shiftDate, assignment.startTime),
+      end: buildCalendarDateTime(assignment.shiftDate, assignment.endTime),
       classNames: ["assignment-event", highlightedAssignmentId === assignment.id ? "assignment-event--highlighted" : ""],
       extendedProps: {
         entityType: "assignment",
@@ -545,7 +539,7 @@ export function StaffCalendar({
       const calendarApi = calendarApiRef.current ?? calendarRef.current?.getApi() ?? null;
       calendarApiRef.current = calendarApi;
       if (calendarApi) {
-        calendarApi.gotoDate(`${createdAssignment.shiftDate}T${createdAssignment.startTime}:00`);
+        calendarApi.gotoDate(buildCalendarDateTime(createdAssignment.shiftDate, createdAssignment.startTime));
         calendarApi.scrollToTime(createdAssignment.startTime);
       }
     }
@@ -720,7 +714,6 @@ export function StaffCalendar({
     };
 
     calendarApiRef.current = calendarApi;
-    calendarViewportStateRef.current = nextViewportState;
     setCalendarViewportState(nextViewportState);
   }
 
@@ -748,10 +741,12 @@ export function StaffCalendar({
 
   function handleDateSelect(info: DateSelectArg) {
     setSelectedItem(null);
+    const startParts = getCalendarDateTimeParts(info.start);
+    const endParts = getCalendarDateTimeParts(info.end);
     setDraftAssignment({
-      shiftDate: toDateStringICT(info.start),
-      startTime: info.start.toTimeString().slice(0, 5),
-      endTime: info.end.toTimeString().slice(0, 5),
+      shiftDate: startParts.date,
+      startTime: startParts.time,
+      endTime: endParts.time,
     });
   }
 
@@ -786,8 +781,10 @@ export function StaffCalendar({
   async function submitCalendarMove(entityType: "booking" | "assignment", item: BookingItem | AssignmentItem, nextStart: Date, nextEnd?: Date) {
     try {
       const formData = new FormData();
-      const nextDate = toDateStringICT(nextStart);
-      const nextTime = nextStart.toTimeString().slice(0, 5);
+      const nextStartParts = getCalendarDateTimeParts(nextStart);
+      const nextDate = nextStartParts.date;
+      const nextTime = nextStartParts.time;
+      const nextEndTime = nextEnd ? getCalendarDateTimeParts(nextEnd).time : nextTime;
 
       if (entityType === "booking") {
         const booking = item as BookingItem;
@@ -815,7 +812,7 @@ export function StaffCalendar({
         formData.set("id", String(assignment.id));
         formData.set("shiftDate", nextDate);
         formData.set("startTime", nextTime);
-        formData.set("endTime", (nextEnd ?? nextStart).toTimeString().slice(0, 5));
+        formData.set("endTime", nextEndTime);
         formData.set("shiftLabel", assignment.shiftLabel);
         if (assignment.shiftZoneName) {
           const zone = zoneList.find((entry) => entry.name === assignment.shiftZoneName);
@@ -828,7 +825,7 @@ export function StaffCalendar({
             ...assignment,
             shiftDate: nextDate,
             startTime: nextTime,
-            endTime: (nextEnd ?? nextStart).toTimeString().slice(0, 5),
+            endTime: nextEndTime,
           },
         });
         success(`Đã cập nhật ca ${assignment.shiftLabel} của ${assignment.staffFullName}`);
@@ -861,7 +858,7 @@ export function StaffCalendar({
     startTransition(async () => {
       try {
         await submitCalendarMove(entityType, item, eventStart, eventEnd);
-      } catch (error) {
+      } catch {
         info.revert();
       }
     });
@@ -885,7 +882,7 @@ export function StaffCalendar({
     startTransition(async () => {
       try {
         await submitCalendarMove("assignment", item, eventStart, eventEnd);
-      } catch (error) {
+      } catch {
         info.revert();
       }
     });
@@ -977,9 +974,9 @@ export function StaffCalendar({
         isOpen={isExpanded}
         onClose={handleExpandedModalClose}
         title="Lịch điều phối mở rộng"
-        className="max-w-[min(96vw,1600px)] h-[92vh]"
+        className="max-w-[min(96vw,1600px)] h-[92vh] [&_.admin-scrollbar]:overflow-hidden"
       >
-        <div>{isExpanded ? renderCalendarSurface() : null}</div>
+        <div className="h-full min-h-0">{isExpanded ? renderCalendarSurface() : null}</div>
       </Modal>
 
       <Card className="h-fit xl:sticky xl:top-6">

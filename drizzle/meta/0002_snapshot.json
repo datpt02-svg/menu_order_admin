@@ -1,7 +1,0 @@
-{
-  "id": "0002_booking_services_sync",
-  "prevId": "0001_pink_maverick",
-  "version": "7",
-  "dialect": "postgresql",
-  "tables": {}
-}
