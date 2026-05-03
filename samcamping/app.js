@@ -3162,18 +3162,29 @@ function isMobileCallDevice() {
 
 async function handleHistoryCall(phone) {
   const normalizedPhone = String(phone || "").trim() || DEFAULT_BOOKING_CONFIG.phone;
-  if (isMobileCallDevice()) {
-    window.location.href = `tel:${normalizedPhone}`;
+  const telLink = `tel:${normalizedPhone}`;
+
+  const copyPhone = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(normalizedPhone);
+      }
+    } catch {}
+  };
+
+  try {
+    window.location.href = telLink;
+  } catch {
+    await copyPhone();
     return;
   }
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(normalizedPhone);
-      window.alert(`Đã copy số ${normalizedPhone}. Dùng số này để gọi Sam Camping trên PC.`);
-      return;
-    }
-  } catch {}
-  window.alert(`Số Sam Camping: ${normalizedPhone}`);
+
+  if (isMobileCallDevice()) return;
+
+  window.setTimeout(() => {
+    if (document.visibilityState === "hidden") return;
+    void copyPhone();
+  }, 400);
 }
 
 function restoreHistoryFocus(field, value, selectionStart, selectionEnd) {

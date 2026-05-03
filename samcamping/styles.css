@@ -871,6 +871,11 @@ button {
   line-height: 1.45;
 }
 
+[data-history-results] {
+  display: grid;
+  gap: 12px;
+}
+
 .history-more {
   justify-self: center;
 }
