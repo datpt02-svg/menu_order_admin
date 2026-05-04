@@ -276,11 +276,7 @@ export async function getMenuSections(): Promise<MenuSectionWithItemsRow[]> {
 
 function buildPublicMenuImageUrl(imagePath: string | null) {
   if (!imagePath) return "";
-  if (/^https?:\/\//i.test(imagePath)) return imagePath;
-  const publicApiBaseUrl = getPublicApiBaseUrl();
-  if (!publicApiBaseUrl || !imagePath.startsWith("/")) return imagePath;
-
-  return `${publicApiBaseUrl.replace(/\/$/, "")}${imagePath}`;
+  return imagePath;
 }
 
 export async function getVisibleMenuSectionsForUser(): Promise<UserMenuSectionRow[]> {

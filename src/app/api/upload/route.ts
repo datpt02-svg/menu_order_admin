@@ -47,14 +47,8 @@ function getPublicPath(fileName: string) {
   return `/uploads/${fileName}`;
 }
 
-function getFileUrl(request: Request, fileName: string) {
-  const publicPath = getPublicPath(fileName);
-  const publicApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  if (publicApiBaseUrl) {
-    return new URL(publicPath, publicApiBaseUrl.endsWith("/") ? publicApiBaseUrl : `${publicApiBaseUrl}/`).toString();
-  }
-
-  return new URL(publicPath, request.url).toString();
+function getFileUrl(_request: Request, fileName: string) {
+  return getPublicPath(fileName);
 }
 
 function fileExistsInPublicDir(fileName: string) {

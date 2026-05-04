@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAllowedCorsOrigins, getPublicApiBaseUrl } from "@/lib/env";
+import { getAllowedCorsOrigins } from "@/lib/env";
 import { safeUserMenuSections } from "@/lib/server/safe-data";
 
 export const runtime = "nodejs";
@@ -19,16 +19,12 @@ function withCors(request: Request, response: NextResponse) {
   return response;
 }
 
-function absolutizeMenuImages(request: Request, sections: Awaited<ReturnType<typeof safeUserMenuSections>>["data"]) {
-  const requestOrigin = new URL(request.url).origin;
-  const configuredBaseUrl = getPublicApiBaseUrl();
-  const baseUrl = (configuredBaseUrl || requestOrigin).replace(/\/$/, "");
-
+function normalizeMenuImages(sections: Awaited<ReturnType<typeof safeUserMenuSections>>["data"]) {
   return sections.map((section) => ({
     ...section,
     items: section.items.map((item) => ({
       ...item,
-      image: item.image && item.image.startsWith("/") ? `${baseUrl}${item.image}` : item.image,
+      image: item.image || "",
     })),
   }));
 }
@@ -39,5 +35,5 @@ export function OPTIONS(request: Request) {
 
 export async function GET(request: Request) {
   const { data } = await safeUserMenuSections();
-  return withCors(request, NextResponse.json({ sections: absolutizeMenuImages(request, data), usingFallback: false }));
+  return withCors(request, NextResponse.json({ sections: normalizeMenuImages(data), usingFallback: false }));
 }
