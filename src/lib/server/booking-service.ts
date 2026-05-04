@@ -104,7 +104,7 @@ async function hasAnyTable(tableNames: string[]) {
     select table_name
     from information_schema.tables
     where table_schema = 'public'
-      and table_name = any(${tableNames})
+      and table_name in (${sql.join(tableNames, sql`, `)})
   `);
 
   return result.rows.length > 0;

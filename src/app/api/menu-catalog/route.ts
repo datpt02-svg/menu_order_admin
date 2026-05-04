@@ -19,14 +19,16 @@ function withCors(request: Request, response: NextResponse) {
   return response;
 }
 
-function absolutizeMenuImages(sections: Awaited<ReturnType<typeof safeUserMenuSections>>["data"]) {
-  const baseUrl = getPublicApiBaseUrl() || "http://localhost:3001";
+function absolutizeMenuImages(request: Request, sections: Awaited<ReturnType<typeof safeUserMenuSections>>["data"]) {
+  const requestOrigin = new URL(request.url).origin;
+  const configuredBaseUrl = getPublicApiBaseUrl();
+  const baseUrl = (configuredBaseUrl || requestOrigin).replace(/\/$/, "");
 
   return sections.map((section) => ({
     ...section,
     items: section.items.map((item) => ({
       ...item,
-      image: item.image && item.image.startsWith("/") ? `${baseUrl.replace(/\/$/, "")}${item.image}` : item.image,
+      image: item.image && item.image.startsWith("/") ? `${baseUrl}${item.image}` : item.image,
     })),
   }));
 }
@@ -37,5 +39,5 @@ export function OPTIONS(request: Request) {
 
 export async function GET(request: Request) {
   const { data } = await safeUserMenuSections();
-  return withCors(request, NextResponse.json({ sections: absolutizeMenuImages(data), usingFallback: false }));
+  return withCors(request, NextResponse.json({ sections: absolutizeMenuImages(request, data), usingFallback: false }));
 }

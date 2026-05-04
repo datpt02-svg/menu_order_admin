@@ -29,6 +29,7 @@
     zaloDescription: "Anh/chị kết bạn Zalo với Sam để được tư vấn nhanh và hỗ trợ tốt hơn nhé ạ.",
     zaloOpenImage: "Mở ảnh QR",
     zaloSaveImage: "Lưu ảnh QR",
+    menuEmpty: "Menu đang được cập nhật.",
   },
   en: {
     htmlLang: "en",
@@ -60,6 +61,7 @@
     zaloDescription: "Add Sam on Zalo for faster consultation and better support.",
     zaloOpenImage: "Open QR image",
     zaloSaveImage: "Save QR image",
+    menuEmpty: "Menu is being updated.",
   },
   zh: {
     htmlLang: "zh",
@@ -91,6 +93,7 @@
     zaloDescription: "添加 Sam 的 Zalo，以获得更快的咨询与更好的支持。",
     zaloOpenImage: "打开 QR 图片",
     zaloSaveImage: "保存 QR 图片",
+    menuEmpty: "菜单正在更新。",
   },
   ko: {
     htmlLang: "ko",
@@ -122,6 +125,7 @@
     zaloDescription: "더 빠른 상담과 지원을 위해 Sam의 Zalo를 추가해 주세요.",
     zaloOpenImage: "QR 이미지 열기",
     zaloSaveImage: "QR 이미지 저장",
+    menuEmpty: "메뉴를 업데이트 중입니다.",
   },
   ja: {
     htmlLang: "ja",
@@ -153,6 +157,7 @@
     zaloDescription: "よりスムーズなご相談とサポートのために、Sam の Zalo を追加してください。",
     zaloOpenImage: "QR 画像を開く",
     zaloSaveImage: "QR 画像を保存",
+    menuEmpty: "メニューを更新中です。",
   },
 };
 
@@ -1862,7 +1867,7 @@ const fallbackSections = [
   }
 ];
 
-let sections = fallbackSections;
+let sections = [];
 
 const localizedMenuOverrides = {
   sections: {
@@ -2150,7 +2155,7 @@ const DEFAULT_BOOKING_CONFIG = {
 };
 
 const state = {
-  activeSection: sections[0].id,
+  activeSection: sections[0]?.id || "",
   locale: "vi",
   selectedItemId: null,
   bookingStep: "service",
@@ -4467,7 +4472,6 @@ async function loadMenuSections() {
   if (!response.ok) throw new Error("menu-catalog-fetch-failed");
   const result = await response.json();
   const nextSections = Array.isArray(result?.sections) ? result.sections : [];
-  if (nextSections.length === 0) throw new Error("menu-catalog-empty");
   sections = nextSections;
   if (!sections.find((section) => section.id === state.activeSection)) {
     state.activeSection = sections[0]?.id || "";
@@ -4478,6 +4482,11 @@ async function loadMenuSections() {
 }
 
 function renderCategories() {
+  if (sections.length === 0) {
+    categoryList.innerHTML = "";
+    return;
+  }
+
   categoryList.innerHTML = sections
     .map(
       (section) => `
@@ -4495,6 +4504,11 @@ function renderCategories() {
 
 function renderSections() {
   const locale = locales[state.locale];
+  if (sections.length === 0) {
+    menuRoot.innerHTML = "";
+    return;
+  }
+
   menuRoot.innerHTML = sections
     .map(
       (section) => `
@@ -5114,8 +5128,8 @@ document.querySelectorAll("dialog.modal").forEach((dialog) => {
 
 Promise.all([
   loadMenuSections().catch(() => {
-    applyLocalizedMenuOverrides();
-    state.activeSection = sections[0]?.id || state.activeSection;
+    sections = [];
+    state.activeSection = "";
   }),
   loadBookingServices().catch(() => {
     state.bookingServices = [];
