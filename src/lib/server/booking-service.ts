@@ -99,7 +99,7 @@ export class FeatureUnavailableError extends Error {
   }
 }
 
-async function hasAnyTable(tableNames: string[]) {
+async function hasAllTables(tableNames: string[]) {
   const result = await db.execute<{ table_name: string }>(sql`
     select table_name
     from information_schema.tables
@@ -107,16 +107,16 @@ async function hasAnyTable(tableNames: string[]) {
       and table_name in (${sql.join(tableNames, sql`, `)})
   `);
 
-  return result.rows.length > 0;
+  return result.rows.length === tableNames.length;
 }
 
 async function ensureBookingsAvailable() {
-  if (await hasAnyTable(["bookings", "booking_status_history", "tables"])) return;
+  if (await hasAllTables(["bookings", "booking_status_history", "tables"])) return;
   throw new FeatureUnavailableError("bookings");
 }
 
 async function ensureWaiterRequestsAvailable() {
-  if (await hasAnyTable(["waiter_requests", "waiter_request_events", "tables"])) return;
+  if (await hasAllTables(["waiter_requests", "waiter_request_events", "tables"])) return;
   throw new FeatureUnavailableError("waiter-requests");
 }
 

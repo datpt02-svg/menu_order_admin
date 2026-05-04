@@ -1285,6 +1285,22 @@ function revalidateTablePages() {
   revalidatePath("/waiter-requests");
 }
 
+async function ensureTableTables() {
+  await db.execute(sql`
+    CREATE TYPE table_status AS ENUM ('available', 'reserved', 'occupied', 'cleaning')
+  `).catch(() => undefined);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS tables (
+      id serial PRIMARY KEY,
+      zone_id integer REFERENCES zones(id) ON DELETE SET NULL,
+      code varchar(20) NOT NULL UNIQUE,
+      seats integer NOT NULL,
+      status table_status NOT NULL DEFAULT 'available',
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+}
+
 export async function saveZoneAction(formData: FormData): Promise<ValidationResult> {
   const { result, payload, id } = await validateZoneForm(formData);
   if (!result.ok || !payload) {
@@ -1321,22 +1337,31 @@ export async function deleteZoneAction(formData: FormData): Promise<ValidationRe
 }
 
 export async function saveTableAction(formData: FormData): Promise<ValidationResult> {
-  const { result, payload, id } = await validateTableForm(formData);
-  if (!result.ok || !payload) {
-    return result;
-  }
+  try {
+    await ensureTableTables();
 
-  if (id) {
-    await db.update(tables).set(payload).where(eq(tables.id, id));
-  } else {
-    await db.insert(tables).values(payload);
-  }
+    const { result, payload, id } = await validateTableForm(formData);
+    if (!result.ok || !payload) {
+      return result;
+    }
 
-  revalidateTablePages();
-  return { ok: true };
+    if (id) {
+      await db.update(tables).set(payload).where(eq(tables.id, id));
+    } else {
+      await db.insert(tables).values(payload);
+    }
+
+    revalidateTablePages();
+    return { ok: true };
+  } catch (error) {
+    const formError = error instanceof Error ? error.message : "Không thể lưu bàn lúc này.";
+    return { ok: false, formError };
+  }
 }
 
 export async function updateTableStatusAction(formData: FormData): Promise<ValidationResult> {
+  await ensureTableTables();
+
   const id = numberValue(formData, "id");
   const status = valueOf(formData, "status");
 
@@ -1351,6 +1376,8 @@ export async function updateTableStatusAction(formData: FormData): Promise<Valid
 }
 
 export async function deleteTableAction(formData: FormData): Promise<ValidationResult> {
+  await ensureTableTables();
+
   const id = numberValue(formData, "id");
   if (!id) return { ok: false, formError: "Không tìm thấy bàn cần xóa." };
 

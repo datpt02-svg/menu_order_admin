@@ -4656,7 +4656,7 @@ function renderApp() {
 
 document.addEventListener("click", (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
+  if (!(target instanceof Element)) return;
 
   const categoryButton = target.closest("[data-category]");
   const detailButton = target.closest("[data-detail]");
