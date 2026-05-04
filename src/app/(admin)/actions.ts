@@ -20,7 +20,7 @@ import {
   waiterRequests,
   zones,
 } from "@/db/schema";
-import { saveBooking, saveWaiterRequest } from "@/lib/server/booking-service";
+import { FeatureUnavailableError, saveBooking, saveWaiterRequest } from "@/lib/server/booking-service";
 import { ensureMenuCatalogTables } from "@/lib/server/menu-catalog-db";
 import { getMenuCatalogLocales, loadMenuCatalogSource } from "@/lib/server/menu-catalog-source";
 import { getMenuSections } from "@/lib/server/queries";
@@ -1069,7 +1069,14 @@ export async function saveBookingAction(formData: FormData): Promise<ValidationR
     return result;
   }
 
-  await saveBooking(payload);
+  try {
+    await saveBooking(payload);
+  } catch (error) {
+    if (error instanceof FeatureUnavailableError) {
+      return { ok: false, formError: "Booking hiện không khả dụng trên DB mặc định này." };
+    }
+    throw error;
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/bookings");
@@ -1563,17 +1570,24 @@ export async function reorderMenuItemsAction(formData: FormData) {
 
 export async function saveWaiterRequestAction(formData: FormData) {
   const id = numberValue(formData, "id");
-  await saveWaiterRequest({
-    id: id || undefined,
-    code: valueOf(formData, "code") || undefined,
-    zoneId: numberValue(formData, "zoneId") || undefined,
-    zoneSlug: valueOf(formData, "zoneSlug") || null,
-    tableId: numberValue(formData, "tableId") || undefined,
-    tableCode: valueOf(formData, "tableCode") || null,
-    need: valueOf(formData, "need"),
-    note: optionalValue(formData, "note"),
-    status: (valueOf(formData, "status") || undefined) as typeof waiterRequests.$inferInsert.status | undefined,
-  });
+  try {
+    await saveWaiterRequest({
+      id: id || undefined,
+      code: valueOf(formData, "code") || undefined,
+      zoneId: numberValue(formData, "zoneId") || undefined,
+      zoneSlug: valueOf(formData, "zoneSlug") || null,
+      tableId: numberValue(formData, "tableId") || undefined,
+      tableCode: valueOf(formData, "tableCode") || null,
+      need: valueOf(formData, "need"),
+      note: optionalValue(formData, "note"),
+      status: (valueOf(formData, "status") || undefined) as typeof waiterRequests.$inferInsert.status | undefined,
+    });
+  } catch (error) {
+    if (error instanceof FeatureUnavailableError) {
+      return;
+    }
+    throw error;
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/waiter-requests");

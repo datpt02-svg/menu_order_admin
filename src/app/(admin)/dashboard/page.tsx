@@ -34,7 +34,7 @@ export default async function DashboardPage() {
       title: "Booking hôm nay",
       value: snapshot.stats.bookingsToday.toString(),
       change: `${snapshot.bookingList.length} booking toàn hệ thống`,
-      hint: "Đếm từ dữ liệu lịch hiện tại và tự fallback nếu PostgreSQL chưa sẵn sàng.",
+      hint: "Đếm từ dữ liệu lịch hiện tại trong DB.",
       href: "/bookings",
     },
     {
@@ -66,7 +66,7 @@ export default async function DashboardPage() {
     <AdminShell
       pathname="/dashboard"
       title="Tổng quan vận hành"
-      description="Theo dõi booking, waiter requests và bàn/khu vực trong cùng một giao diện đồng bộ thương hiệu."
+      description="Theo dõi booking, waiter requests và bàn/khu vực trong cùng một giao diện quản trị."
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]">
         <div className="space-y-4">
@@ -96,10 +96,10 @@ export default async function DashboardPage() {
             <CardContent>
               <SectionHeading
                 title="Booking sắp đến giờ"
-                description="Dùng khối này để chủ quán nhìn nhanh flow tối nay trước khi qua calendar tuần hoặc export Excel."
+                description="Mốc booking gần nhất theo dữ liệu hiện có trong hệ thống."
               />
               <div className="space-y-3">
-                {snapshot.timeline.map((item) => (
+                {snapshot.timeline.length > 0 ? snapshot.timeline.map((item) => (
                   <div key={`${item.time}-${item.title}`} className="flex flex-col gap-3 rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-start gap-4">
                       <div className="min-w-20 rounded-full bg-[var(--mint-strong)] px-3 py-2 text-center text-sm font-bold text-[var(--forest-dark)]">
@@ -117,7 +117,11 @@ export default async function DashboardPage() {
                       Mở chi tiết
                     </Link>
                   </div>
-                ))}
+                )) : (
+                  <div className="rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4 text-sm text-[var(--muted)]">
+                    Chưa có booking nào sắp đến giờ.
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -129,11 +133,11 @@ export default async function DashboardPage() {
           <Card>
             <CardContent>
               <SectionHeading
-                title="Realtime waiter feed"
-                description="Mô phỏng feed nhận yêu cầu phục vụ theo thời gian thực."
+                title="Yêu cầu phục vụ gần đây"
+                description="Các yêu cầu phục vụ mới nhất đang có trong hệ thống."
               />
               <div className="space-y-3">
-                {waiterFeed.map((request) => (
+                {waiterFeed.length > 0 ? waiterFeed.map((request) => (
                   <div key={request.code} className="rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-semibold text-[var(--forest-dark)]">{request.tableCode ?? "Chưa gán bàn"} · {request.zoneName ?? "Chưa gán khu"}</div>
@@ -145,7 +149,11 @@ export default async function DashboardPage() {
                     <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{request.note}</p>
                     <div className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--mint-deep)]">{new Date(request.createdAt).toLocaleString("vi-VN")}</div>
                   </div>
-                ))}
+                )) : (
+                  <div className="rounded-[18px] border border-[color:var(--line)] bg-white/60 p-4 text-sm text-[var(--muted)]">
+                    Chưa có yêu cầu phục vụ nào.
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -154,16 +162,16 @@ export default async function DashboardPage() {
             <CardContent>
               <SectionHeading
                 title="Tín hiệu điều phối"
-                description="Dùng để hỗ trợ quyết định tăng ca khi calendar tuần có dấu hiệu quá tải."
+                description="Tóm tắt nhanh để nhìn tình trạng vận hành hiện tại."
               />
               <div className="space-y-3 text-sm text-[var(--muted)]">
                 <div className="rounded-[18px] bg-white/60 p-4">
-                  <div className="font-semibold text-[var(--forest-dark)]">Thứ 7 tuần tới</div>
-                  <p className="mt-2 leading-6">Đã có 31 booking, tập trung 18:00–20:30. Nên chuẩn bị thêm 2 nhân viên phục vụ và 1 nhân viên bếp.</p>
+                  <div className="font-semibold text-[var(--forest-dark)]">Booking hôm nay</div>
+                  <p className="mt-2 leading-6">{todaysBookings.length > 0 ? `${todaysBookings.length} booking trong ngày đang cần theo dõi.` : "Chưa có booking nào trong ngày."}</p>
                 </div>
                 <div className="rounded-[18px] bg-white/60 p-4">
-                  <div className="font-semibold text-[var(--forest-dark)]">Khung giờ cao điểm</div>
-                  <p className="mt-2 leading-6">Các booking buổi tối đang dồn mạnh vào cuối tuần. Ưu tiên rà soát bàn trống và xác nhận sớm các booking pending.</p>
+                  <div className="font-semibold text-[var(--forest-dark)]">Yêu cầu phục vụ</div>
+                  <p className="mt-2 leading-6">{waiterFeed.length > 0 ? `${waiterFeed.length} yêu cầu gần đây đang hiển thị trên dashboard.` : "Chưa có yêu cầu phục vụ nào."}</p>
                 </div>
               </div>
             </CardContent>

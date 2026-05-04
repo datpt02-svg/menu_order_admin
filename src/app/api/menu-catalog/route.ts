@@ -26,7 +26,7 @@ function absolutizeMenuImages(sections: Awaited<ReturnType<typeof safeUserMenuSe
     ...section,
     items: section.items.map((item) => ({
       ...item,
-      image: item.image.startsWith("/") ? `${baseUrl.replace(/\/$/, "")}${item.image}` : item.image,
+      image: item.image && item.image.startsWith("/") ? `${baseUrl.replace(/\/$/, "")}${item.image}` : item.image,
     })),
   }));
 }
@@ -36,6 +36,6 @@ export function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const { data, usingFallback } = await safeUserMenuSections();
-  return withCors(request, NextResponse.json({ sections: absolutizeMenuImages(data), usingFallback }));
+  const { data } = await safeUserMenuSections();
+  return withCors(request, NextResponse.json({ sections: absolutizeMenuImages(data), usingFallback: false }));
 }

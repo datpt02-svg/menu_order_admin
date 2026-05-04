@@ -186,8 +186,8 @@ export async function AdminShell({
           </nav>
 
           <div className="mt-6 rounded-[24px] border border-[color:var(--line)] bg-[var(--panel-strong)] p-4 text-sm text-[var(--forest-dark)]">
-            <div className="font-[family:var(--font-charm)] text-lg font-bold">Gợi ý vận hành</div>
-            <p className="mt-2 leading-6 text-[var(--muted)]">Tuần tới mật độ booking tăng cao. Ưu tiên theo dõi calendar tuần và xuất Excel để sắp xếp ca làm.</p>
+            <div className="font-[family:var(--font-charm)] text-lg font-bold">Trạng thái dữ liệu</div>
+            <p className="mt-2 leading-6 text-[var(--muted)]">Các màn quản trị hiển thị dữ liệu thật từ DB. Nếu chưa cấu hình hoặc chưa có bản ghi, giao diện sẽ hiện trạng thái trống.</p>
           </div>
         </aside>
 

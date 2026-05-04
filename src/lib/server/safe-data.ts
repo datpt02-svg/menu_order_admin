@@ -1,11 +1,4 @@
 import {
-  getFallbackCalendarSnapshot,
-  getFallbackDashboardSnapshot,
-  getFallbackStaffSnapshot,
-  getFallbackZones,
-} from "@/lib/server/fallback-data";
-import { loadMenuCatalogSource } from "@/lib/server/menu-catalog-source";
-import {
   getBookingConfig,
   getBookings,
   getBookingServices,
@@ -23,6 +16,38 @@ import {
   getZones,
 } from "@/lib/server/queries";
 
+const emptyDashboardSnapshot = {
+  bookingList: [],
+  waiterList: [],
+  tableList: [],
+  stats: {
+    bookingsToday: 0,
+    waiterOpen: 0,
+    occupiedTables: 0,
+    activeStaff: 0,
+    assignedStaffToday: 0,
+    staffingAlerts: 0,
+  },
+  services: [],
+  staffList: [],
+  shiftList: [],
+  assignmentList: [],
+  staffingRecommendations: [],
+  assignmentConflicts: [],
+  timeline: [],
+};
+
+const emptyStaffWorkspace = {
+  bookingList: [],
+  zoneList: [],
+  timeline: [],
+  staffList: [],
+  shiftList: [],
+  assignmentList: [],
+  staffingRecommendations: [],
+  assignmentConflicts: [],
+};
+
 export async function safeDashboardSnapshot() {
   try {
     const snapshot = await getDashboardSnapshot();
@@ -39,8 +64,8 @@ export async function safeDashboardSnapshot() {
     };
   } catch {
     return {
-      ...getFallbackDashboardSnapshot(),
-      usingFallback: true,
+      ...emptyDashboardSnapshot,
+      usingFallback: false,
     };
   }
 }
@@ -49,7 +74,7 @@ export async function safeBookings() {
   try {
     return { data: await getBookings(), usingFallback: false };
   } catch {
-    return { data: getFallbackDashboardSnapshot().bookingList, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -57,7 +82,7 @@ export async function safeWaiterRequests() {
   try {
     return { data: await getWaiterRequests(), usingFallback: false };
   } catch {
-    return { data: getFallbackDashboardSnapshot().waiterList, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -65,7 +90,7 @@ export async function safeTables() {
   try {
     return { data: await getTables(), usingFallback: false };
   } catch {
-    return { data: getFallbackDashboardSnapshot().tableList, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -73,30 +98,22 @@ export async function safeServices() {
   try {
     return { data: await getServices(), usingFallback: false };
   } catch {
-    return { data: getFallbackDashboardSnapshot().services, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
-
-const fallbackBookingConfig = {
-  depositAmount: 100000,
-  bankName: "MBBank",
-  bankCode: "MB",
-  accountNumber: "09680881",
-  phone: "09680881",
-};
 
 export async function safeBookingServices() {
   try {
     return { data: await getBookingServices(), usingFallback: false };
   } catch {
-    return { data: getFallbackDashboardSnapshot().services, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
 export async function safeBookingConfig() {
   try {
     const data = await getBookingConfig();
-    if (!data) return { data: fallbackBookingConfig, usingFallback: true };
+    if (!data) return { data: null, usingFallback: false };
     return {
       data: {
         depositAmount: data.depositAmount,
@@ -108,17 +125,15 @@ export async function safeBookingConfig() {
       usingFallback: false,
     };
   } catch {
-    return { data: fallbackBookingConfig, usingFallback: true };
+    return { data: null, usingFallback: false };
   }
 }
 
 export async function safeZones() {
   try {
-    const data = await getZones();
-    if (data.length === 0) return { data: getFallbackZones(), usingFallback: true };
-    return { data, usingFallback: false };
+    return { data: await getZones(), usingFallback: false };
   } catch {
-    return { data: getFallbackZones(), usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -126,26 +141,23 @@ export async function safeMenuSections() {
   try {
     return { data: await getMenuSections(), usingFallback: false };
   } catch {
-    return { data: [], usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
 export async function safeUserMenuSections() {
   try {
-    const data = await getVisibleMenuSectionsForUser();
-    if (data.length > 0) return { data, usingFallback: false };
+    return { data: await getVisibleMenuSectionsForUser(), usingFallback: false };
   } catch {
-    // ignore and fall back to source file below
+    return { data: [], usingFallback: false };
   }
-
-  return { data: await loadMenuCatalogSource(), usingFallback: true };
 }
 
 export async function safeStaffMembers() {
   try {
     return { data: await getStaffMembers(), usingFallback: false };
   } catch {
-    return { data: getFallbackStaffSnapshot().staffList, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -153,7 +165,7 @@ export async function safeStaffShifts() {
   try {
     return { data: await getStaffShifts(), usingFallback: false };
   } catch {
-    return { data: getFallbackStaffSnapshot().shiftList, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -161,7 +173,7 @@ export async function safeStaffAssignments() {
   try {
     return { data: await getStaffAssignments(), usingFallback: false };
   } catch {
-    return { data: getFallbackStaffSnapshot().assignmentList, usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -169,7 +181,7 @@ export async function safeShiftTemplates() {
   try {
     return { data: await getShiftTemplates(), usingFallback: false };
   } catch {
-    return { data: [], usingFallback: true };
+    return { data: [], usingFallback: false };
   }
 }
 
@@ -177,7 +189,7 @@ export async function safeStaffWorkspace() {
   try {
     return { data: await getStaffingCalendarSnapshot(), usingFallback: false };
   } catch {
-    return { data: getFallbackCalendarSnapshot(), usingFallback: true };
+    return { data: emptyStaffWorkspace, usingFallback: false };
   }
 }
 

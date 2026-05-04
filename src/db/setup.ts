@@ -18,6 +18,15 @@ async function getCurrentMigrationHash() {
 async function baselineSquashedMigration() {
   const currentHash = await getCurrentMigrationHash();
 
+  const migrationTableRows = await db.execute<{ table_name: string }>(sql`
+    select table_name
+    from information_schema.tables
+    where table_schema = 'drizzle'
+      and table_name = '__drizzle_migrations'
+  `);
+
+  if (migrationTableRows.rows.length === 0) return;
+
   const migrationRows = await db.execute<{ id: number; hash: string }>(
     sql`select id, hash from drizzle.__drizzle_migrations order by created_at`,
   );
@@ -29,7 +38,7 @@ async function baselineSquashedMigration() {
     select table_name
     from information_schema.tables
     where table_schema = 'public'
-      and table_name in ('zones', 'tables', 'bookings', 'services')
+      and table_name in ('zones', 'services', 'menu_sections', 'menu_items', 'booking_configs')
   `);
 
   const hasExistingSchema = tableRows.rows.length > 0;

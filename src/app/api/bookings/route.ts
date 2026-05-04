@@ -6,7 +6,8 @@ import { db } from "@/db/client";
 import { bookingStatusHistory, bookings } from "@/db/schema";
 import { getAllowedCorsOrigins } from "@/lib/env";
 import { REALTIME_EVENTS, broadcastRealtimeEvent } from "@/lib/server/realtime-events";
-import { ActiveBookingConflictError, saveBooking } from "@/lib/server/booking-service";
+import { ActiveBookingConflictError, FeatureUnavailableError, saveBooking } from "@/lib/server/booking-service";
+import { sql } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,17 @@ const bookingSchema = z.object({
 const cancelBookingSchema = z.object({
   code: z.string().min(1),
 });
+
+async function bookingsFeatureAvailable() {
+  const result = await db.execute<{ table_name: string }>(sql`
+    select table_name
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name in ('bookings', 'booking_status_history', 'tables')
+  `);
+
+  return result.rows.length === 3;
+}
 
 function serializeBooking(row: {
   id: number;
@@ -248,6 +260,10 @@ export async function GET(request: NextRequest) {
   const customerPhone = request.nextUrl.searchParams.get("customerPhone")?.trim();
   const history = request.nextUrl.searchParams.get("history")?.trim();
 
+  if (!await bookingsFeatureAvailable()) {
+    return withCors(request, NextResponse.json({ error: "Booking feature unavailable on this database" }, { status: 503 }));
+  }
+
   if (history === "approved") {
     const limit = Number(request.nextUrl.searchParams.get("limit") || 5);
     const before = request.nextUrl.searchParams.get("before")?.trim() || null;
@@ -285,18 +301,25 @@ export async function GET(request: NextRequest) {
     return withCors(request, NextResponse.json({ error: "Missing booking code" }, { status: 400 }));
   }
 
-  const booking = await findBookingByCode(code);
-  if (!booking) {
-    logBookingApi("GET:not-found", { code });
-    return withCors(request, NextResponse.json({ error: "Booking not found" }, { status: 404 }));
-  }
+  try {
+    const booking = await findBookingByCode(code);
+    if (!booking) {
+      logBookingApi("GET:not-found", { code });
+      return withCors(request, NextResponse.json({ error: "Booking not found" }, { status: 404 }));
+    }
 
-  logBookingApi("GET:found", {
-    code,
-    status: booking.status,
-    depositReviewStatus: booking.depositReviewStatus,
-  });
-  return withCors(request, NextResponse.json({ booking }, { status: 200 }));
+    logBookingApi("GET:found", {
+      code,
+      status: booking.status,
+      depositReviewStatus: booking.depositReviewStatus,
+    });
+    return withCors(request, NextResponse.json({ booking }, { status: 200 }));
+  } catch (error) {
+    if (error instanceof FeatureUnavailableError) {
+      return withCors(request, NextResponse.json({ error: "Booking feature unavailable on this database" }, { status: 503 }));
+    }
+    throw error;
+  }
 }
 
 export async function DELETE(request: Request) {
@@ -308,7 +331,15 @@ export async function DELETE(request: Request) {
     return withCors(request, NextResponse.json({ error: "Invalid cancel payload", issues: payload.error.issues }, { status: 400 }));
   }
 
-  const result = await cancelBookingByCode(payload.data.code);
+  let result;
+  try {
+    result = await cancelBookingByCode(payload.data.code);
+  } catch (error) {
+    if (error instanceof FeatureUnavailableError) {
+      return withCors(request, NextResponse.json({ error: "Booking feature unavailable on this database" }, { status: 503 }));
+    }
+    throw error;
+  }
   if (!result) {
     logBookingApi("DELETE:not-found", { code: payload.data.code });
     return withCors(request, NextResponse.json({ error: "Booking not found" }, { status: 404 }));
@@ -359,6 +390,10 @@ export async function POST(request: Request) {
           { status: 409 },
         ),
       );
+    }
+
+    if (error instanceof FeatureUnavailableError) {
+      return withCors(request, NextResponse.json({ error: "Booking feature unavailable on this database" }, { status: 503 }));
     }
 
     logBookingApi("POST:error", {

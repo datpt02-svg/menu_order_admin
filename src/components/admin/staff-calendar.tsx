@@ -962,11 +962,6 @@ export function StaffCalendar({
             </div>
           </div>
 
-          {usingFallback ? (
-            <div className="mb-4 rounded-[18px] border border-[color:var(--line)] bg-[rgba(244,226,155,0.24)] px-4 py-3 text-sm text-[var(--forest-dark)]">
-              Dữ liệu đang ở chế độ fallback, lịch vẫn xem được nhưng cần kiểm tra kết nối DB trước khi điều phối thực tế.
-            </div>
-          ) : null}
           <div className={calendarContainerClassName}>{isExpanded ? null : renderCalendarSurface()}</div>
         </CardContent>
       </Card>

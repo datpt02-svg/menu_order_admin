@@ -15,7 +15,7 @@ type BookingConfig = {
   bankCode: string;
   accountNumber: string;
   phone: string;
-};
+} | null;
 
 type BankOption = {
   code: string;
@@ -211,7 +211,14 @@ async function submitBookingConfig(formData: FormData) {
 }
 
 export function BookingSettingsContent({ bookingConfig, saved, error, formError, fieldErrors }: { bookingConfig: BookingConfig; saved?: boolean; error?: boolean; formError?: string; fieldErrors?: Record<string, string>; }) {
-  const currentBankOption = buildCurrentBankOption(bookingConfig.bankCode, bookingConfig.bankName);
+  const resolvedBookingConfig = bookingConfig || {
+    depositAmount: 0,
+    bankName: "",
+    bankCode: "",
+    accountNumber: "",
+    phone: "",
+  };
+  const currentBankOption = buildCurrentBankOption(resolvedBookingConfig.bankCode, resolvedBookingConfig.bankName);
 
   if (saved && error) {
     error = false;
@@ -222,13 +229,13 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
   const bankOptions = currentBankOption && !BANK_OPTIONS.some((bank) => bank.code === currentBankOption.code)
     ? [currentBankOption, ...BANK_OPTIONS]
     : BANK_OPTIONS;
-  const effectiveBankCode = currentBankOption?.code || getBankCodeValue(bookingConfig.bankCode, bookingConfig.bankName);
-  const effectiveBankName = currentBankOption?.name || getBankNameValue(bookingConfig.bankCode, bookingConfig.bankName);
-  const displayAmount = bookingConfig.depositAmount > 0 ? `${formatCurrency(bookingConfig.depositAmount)}đ` : "--";
+  const effectiveBankCode = currentBankOption?.code || getBankCodeValue(resolvedBookingConfig.bankCode, resolvedBookingConfig.bankName);
+  const effectiveBankName = currentBankOption?.name || getBankNameValue(resolvedBookingConfig.bankCode, resolvedBookingConfig.bankName);
+  const displayAmount = resolvedBookingConfig.depositAmount > 0 ? `${formatCurrency(resolvedBookingConfig.depositAmount)}đ` : "--";
   const previewQrUrl = buildVietQrUrl({
     bankCode: effectiveBankCode,
-    accountNumber: bookingConfig.accountNumber,
-    amount: bookingConfig.depositAmount,
+    accountNumber: resolvedBookingConfig.accountNumber,
+    amount: resolvedBookingConfig.depositAmount,
     addInfo: "SAM-AB12",
   });
 
@@ -240,6 +247,11 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
             title="Settings"
             description="Thông tin chuyển khoản và số điện thoại này sẽ hiển thị ở luồng booking public. Nội dung chuyển khoản luôn là mã booking sinh tự động."
           />
+          {!bookingConfig ? (
+            <div className="mb-4 rounded-[16px] border border-[color:var(--line)] bg-white/70 px-4 py-3 text-sm text-[var(--muted)]">
+              Chưa có cấu hình booking. Điền thông tin bên dưới để bật hướng dẫn cọc cho khách.
+            </div>
+          ) : null}
 
           <form action={submitBookingConfig} className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
             <div className="space-y-4">
@@ -255,7 +267,7 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
               ) : null}
               <div>
                 <FieldLabel>Số tiền cọc</FieldLabel>
-                <Input name="depositAmount" type="number" inputMode="numeric" min={1} step={1} defaultValue={String(bookingConfig.depositAmount)} invalid={hasError("depositAmount")} />
+                <Input name="depositAmount" type="number" inputMode="numeric" min={1} step={1} defaultValue={String(resolvedBookingConfig.depositAmount)} invalid={hasError("depositAmount")} />
                 <FieldError>{resolvedFieldErrors.depositAmount}</FieldError>
               </div>
 
@@ -282,13 +294,13 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
 
               <div>
                 <FieldLabel>Số tài khoản</FieldLabel>
-                <NumericInput name="accountNumber" inputMode="numeric" pattern="[0-9]*" defaultValue={bookingConfig.accountNumber} invalid={hasError("accountNumber")} />
+                <NumericInput name="accountNumber" inputMode="numeric" pattern="[0-9]*" defaultValue={resolvedBookingConfig.accountNumber} invalid={hasError("accountNumber")} />
                 <FieldError>{resolvedFieldErrors.accountNumber}</FieldError>
               </div>
 
               <div>
                 <FieldLabel>Số điện thoại nhận cuộc gọi</FieldLabel>
-                <NumericInput name="phone" type="tel" inputMode="numeric" pattern="[0-9]*" defaultValue={bookingConfig.phone} invalid={hasError("phone")} />
+                <NumericInput name="phone" type="tel" inputMode="numeric" pattern="[0-9]*" defaultValue={resolvedBookingConfig.phone} invalid={hasError("phone")} />
                 <FieldError>{resolvedFieldErrors.phone}</FieldError>
               </div>
 
@@ -310,8 +322,8 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
                 <div className="space-y-3 rounded-[18px] border border-[var(--line)] bg-white/85 p-4 text-sm text-[var(--text)]">
                   <div className="flex items-center justify-between gap-3"><span>Số tiền cọc</span><strong>{displayAmount}</strong></div>
                   <div className="flex items-center justify-between gap-3"><span>Ngân hàng</span><strong>{effectiveBankName || "--"}</strong></div>
-                  <div className="flex items-center justify-between gap-3"><span>Số tài khoản</span><strong>{bookingConfig.accountNumber || "--"}</strong></div>
-                  <div className="flex items-center justify-between gap-3"><span>Số điện thoại</span><strong>{bookingConfig.phone || "--"}</strong></div>
+                  <div className="flex items-center justify-between gap-3"><span>Số tài khoản</span><strong>{resolvedBookingConfig.accountNumber || "--"}</strong></div>
+                  <div className="flex items-center justify-between gap-3"><span>Số điện thoại</span><strong>{resolvedBookingConfig.phone || "--"}</strong></div>
                   <div className="flex items-center justify-between gap-3"><span>Nội dung</span><strong>SAM-AB12</strong></div>
                   {previewQrUrl ? (
                     <div className="space-y-3 rounded-[16px] border border-[var(--line)] bg-[rgba(244,251,240,0.7)] p-3">

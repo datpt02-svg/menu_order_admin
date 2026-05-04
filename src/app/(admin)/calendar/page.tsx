@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { safeStaffWorkspace } from "@/lib/server/safe-data";
 
 export default async function CalendarPage() {
-  const { data, usingFallback } = await safeStaffWorkspace();
+  const { data } = await safeStaffWorkspace();
 
   return (
     <AdminShell
@@ -86,7 +86,7 @@ export default async function CalendarPage() {
         }))}
         staffingRecommendations={data.staffingRecommendations}
         assignmentConflicts={data.assignmentConflicts}
-        usingFallback={usingFallback}
+        usingFallback={false}
         moveBookingAction={moveBookingAction}
         moveStaffAssignmentAction={moveStaffAssignmentAction}
         saveStaffAssignmentAction={saveStaffAssignmentAction}

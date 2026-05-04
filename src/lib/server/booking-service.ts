@@ -2,6 +2,7 @@ import { eq, ne } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import { bookingStatusHistory, bookings, tables, waiterRequestEvents, waiterRequests, zones } from "@/db/schema";
+import { sql } from "drizzle-orm";
 import { REALTIME_EVENTS, broadcastRealtimeEvent } from "@/lib/server/realtime-events";
 
 function slugify(input: string) {
@@ -89,6 +90,34 @@ export class ActiveBookingConflictError extends Error {
     this.name = "ActiveBookingConflictError";
     this.booking = booking;
   }
+}
+
+export class FeatureUnavailableError extends Error {
+  constructor(feature: "bookings" | "waiter-requests") {
+    super(`${feature}-unavailable`);
+    this.name = "FeatureUnavailableError";
+  }
+}
+
+async function hasAnyTable(tableNames: string[]) {
+  const result = await db.execute<{ table_name: string }>(sql`
+    select table_name
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = any(${tableNames})
+  `);
+
+  return result.rows.length > 0;
+}
+
+async function ensureBookingsAvailable() {
+  if (await hasAnyTable(["bookings", "booking_status_history", "tables"])) return;
+  throw new FeatureUnavailableError("bookings");
+}
+
+async function ensureWaiterRequestsAvailable() {
+  if (await hasAnyTable(["waiter_requests", "waiter_request_events", "tables"])) return;
+  throw new FeatureUnavailableError("waiter-requests");
 }
 
 function normalizePhone(value: string) {
@@ -188,6 +217,8 @@ function isSuccessfulApprovedBooking(booking: {
 }
 
 async function findBookingByCode(code: string) {
+  await ensureBookingsAvailable();
+
   const rows = await db
     .select({
       id: bookings.id,
@@ -201,6 +232,8 @@ async function findBookingByCode(code: string) {
 }
 
 async function findBlockingBookingByPhone(customerPhone: string, currentBookingId?: number) {
+  await ensureBookingsAvailable();
+
   const normalizedPhone = normalizePhone(customerPhone);
   if (!normalizedPhone) return null;
 
@@ -233,6 +266,8 @@ async function findBlockingBookingByPhone(customerPhone: string, currentBookingI
 }
 
 export async function saveBooking(input: SaveBookingInput) {
+  await ensureBookingsAvailable();
+
   const cleaned = getResolvedInput(input);
   let existingBookingId = cleaned.id ?? 0;
 
@@ -316,6 +351,8 @@ export type SaveWaiterRequestInput = {
 };
 
 export async function saveWaiterRequest(input: SaveWaiterRequestInput) {
+  await ensureWaiterRequestsAvailable();
+
   const zoneId = input.zoneId ?? await findZoneIdBySlug(input.zoneSlug);
   const tableId = input.tableId ?? await findTableIdByCode(input.tableCode);
   const payload = {

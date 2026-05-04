@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAllowedCorsOrigins } from "@/lib/env";
-import { saveWaiterRequest } from "@/lib/server/booking-service";
+import { FeatureUnavailableError, saveWaiterRequest } from "@/lib/server/booking-service";
 
 export const runtime = "nodejs";
 
@@ -39,6 +39,13 @@ export async function POST(request: Request) {
     return withCors(request, NextResponse.json({ error: "Invalid waiter request payload", issues: payload.error.issues }, { status: 400 }));
   }
 
-  const waiterRequest = await saveWaiterRequest(payload.data);
-  return withCors(request, NextResponse.json({ waiterRequest }, { status: 201 }));
+  try {
+    const waiterRequest = await saveWaiterRequest(payload.data);
+    return withCors(request, NextResponse.json({ waiterRequest }, { status: 201 }));
+  } catch (error) {
+    if (error instanceof FeatureUnavailableError) {
+      return withCors(request, NextResponse.json({ error: "Waiter request feature unavailable on this database" }, { status: 503 }));
+    }
+    throw error;
+  }
 }
