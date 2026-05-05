@@ -87,7 +87,7 @@ services:
       user:
         condition: service_started
     ports:
-      - "80:80"
+      - "3002:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped

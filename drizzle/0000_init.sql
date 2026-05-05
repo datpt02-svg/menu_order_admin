@@ -57,6 +57,12 @@ CREATE TABLE "services" (
 	CONSTRAINT "services_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."table_status" AS ENUM('available', 'reserved', 'occupied', 'cleaning');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
 CREATE TABLE "zones" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar(120) NOT NULL,
@@ -65,4 +71,16 @@ CREATE TABLE "zones" (
 	CONSTRAINT "zones_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
+CREATE TABLE "tables" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"zone_id" integer,
+	"code" varchar(20) NOT NULL,
+	"seats" integer NOT NULL,
+	"status" "table_status" DEFAULT 'available' NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "tables_code_unique" UNIQUE("code")
+);
+--> statement-breakpoint
 ALTER TABLE "menu_items" ADD CONSTRAINT "menu_items_section_id_menu_sections_id_fk" FOREIGN KEY ("section_id") REFERENCES "public"."menu_sections"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "tables" ADD CONSTRAINT "tables_zone_id_zones_id_fk" FOREIGN KEY ("zone_id") REFERENCES "public"."zones"("id") ON DELETE set null ON UPDATE no action;
