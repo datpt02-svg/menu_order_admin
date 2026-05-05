@@ -15,6 +15,7 @@ type BookingConfig = {
   bankCode: string;
   accountNumber: string;
   phone: string;
+  wifiPassword: string;
 } | null;
 
 type BankOption = {
@@ -217,6 +218,7 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
     bankCode: "",
     accountNumber: "",
     phone: "",
+    wifiPassword: "",
   };
   const currentBankOption = buildCurrentBankOption(resolvedBookingConfig.bankCode, resolvedBookingConfig.bankName);
 
@@ -304,6 +306,18 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
                 <FieldError>{resolvedFieldErrors.phone}</FieldError>
               </div>
 
+              <div className="rounded-[18px] border border-[var(--line)] bg-[rgba(244,251,240,0.5)] p-4">
+                <div className="mb-3">
+                  <div className="text-sm font-semibold text-[var(--forest-dark)]">Wi‑Fi</div>
+                  <p className="text-xs text-[var(--muted)]">Mật khẩu này sẽ được dùng cho nút copy ở info modal của trang public.</p>
+                </div>
+                <div>
+                  <FieldLabel>Mật khẩu Wi‑Fi</FieldLabel>
+                  <Input name="wifiPassword" defaultValue={resolvedBookingConfig.wifiPassword} invalid={hasError("wifiPassword")} />
+                  <FieldError>{resolvedFieldErrors.wifiPassword}</FieldError>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3">
                 <Button type="submit">
                   <Save className="h-4 w-4" />
@@ -324,6 +338,7 @@ export function BookingSettingsContent({ bookingConfig, saved, error, formError,
                   <div className="flex items-center justify-between gap-3"><span>Ngân hàng</span><strong>{effectiveBankName || "--"}</strong></div>
                   <div className="flex items-center justify-between gap-3"><span>Số tài khoản</span><strong>{resolvedBookingConfig.accountNumber || "--"}</strong></div>
                   <div className="flex items-center justify-between gap-3"><span>Số điện thoại</span><strong>{resolvedBookingConfig.phone || "--"}</strong></div>
+                  <div className="flex items-center justify-between gap-3"><span>Wi‑Fi password</span><strong>{resolvedBookingConfig.wifiPassword || "--"}</strong></div>
                   <div className="flex items-center justify-between gap-3"><span>Nội dung</span><strong>SAM-AB12</strong></div>
                   {previewQrUrl ? (
                     <div className="space-y-3 rounded-[16px] border border-[var(--line)] bg-[rgba(244,251,240,0.7)] p-3">

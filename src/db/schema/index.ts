@@ -143,6 +143,7 @@ export const bookingConfigs = pgTable("booking_configs", {
   bankCode: varchar("bank_code", { length: 40 }).notNull().default("mbbank"),
   accountNumber: varchar("account_number", { length: 50 }).notNull(),
   phone: varchar("phone", { length: 40 }).notNull().default("09680881"),
+  wifiPassword: varchar("wifi_password", { length: 120 }).notNull().default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

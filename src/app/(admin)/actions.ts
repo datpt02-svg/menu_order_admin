@@ -197,6 +197,7 @@ type BookingConfigValidationPayload = {
   bankCode: string;
   accountNumber: string;
   phone: string;
+  wifiPassword: string;
   updatedAt: Date;
 };
 
@@ -982,6 +983,7 @@ async function validateBookingConfigForm(formData: FormData): Promise<{ result: 
   const bankCode = normalizeBookingConfigBankCode(valueOf(formData, "bankCode"));
   const accountNumber = valueOf(formData, "accountNumber");
   const phone = valueOf(formData, "phone");
+  const wifiPassword = valueOf(formData, "wifiPassword");
   const fieldErrors: Record<string, string> = {};
   const selectedBank = BOOKING_CONFIG_BANK_OPTIONS.find((bank) => bank.code === bankCode);
 
@@ -1003,6 +1005,11 @@ async function validateBookingConfigForm(formData: FormData): Promise<{ result: 
   } else if (phone.length > 40) {
     fieldErrors.phone = "Số điện thoại không được vượt quá 40 ký tự.";
   }
+  if (!wifiPassword) {
+    fieldErrors.wifiPassword = "Mật khẩu Wi‑Fi là bắt buộc.";
+  } else if (wifiPassword.length > 120) {
+    fieldErrors.wifiPassword = "Mật khẩu Wi‑Fi không được vượt quá 120 ký tự.";
+  }
 
   if (Object.keys(fieldErrors).length || !selectedBank) {
     return { result: buildValidationResult(fieldErrors, "Vui lòng kiểm tra lại cấu hình settings.") };
@@ -1016,6 +1023,7 @@ async function validateBookingConfigForm(formData: FormData): Promise<{ result: 
       bankCode: selectedBank.code,
       accountNumber,
       phone,
+      wifiPassword,
       updatedAt: new Date(),
     },
   };
@@ -1236,6 +1244,7 @@ async function ensureBookingConfigTable() {
       bank_code varchar(40) NOT NULL DEFAULT 'mbbank',
       account_number varchar(50) NOT NULL,
       phone varchar(40) NOT NULL DEFAULT '09680881',
+      wifi_password varchar(120) NOT NULL DEFAULT '',
       created_at timestamp NOT NULL DEFAULT now(),
       updated_at timestamp NOT NULL DEFAULT now()
     )
@@ -1243,6 +1252,10 @@ async function ensureBookingConfigTable() {
   await db.execute(sql`
     ALTER TABLE booking_configs
     ADD COLUMN IF NOT EXISTS phone varchar(40) NOT NULL DEFAULT '09680881'
+  `);
+  await db.execute(sql`
+    ALTER TABLE booking_configs
+    ADD COLUMN IF NOT EXISTS wifi_password varchar(120) NOT NULL DEFAULT ''
   `);
 }
 

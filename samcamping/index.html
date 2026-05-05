@@ -118,14 +118,14 @@
       </form>
     </dialog>
 
-    <dialog id="info-modal" class="modal modal--sheet">
+    <dialog id="info-modal" class="modal modal--sheet modal--sheet-centered">
       <form method="dialog" class="modal__sheet modal__sheet--info">
         <button class="modal__close" aria-label="&#x110;&#xF3;ng th&#xF4;ng tin">&#x00D7;</button>
         <div class="info-sheet">
           <div class="info-sheet__handle" aria-hidden="true"></div>
           <h3 class="info-sheet__title">Sam Camping</h3>
           <div class="info-sheet__list">
-            <a class="info-sheet__item" href="javascript:void(0)">
+            <button class="info-sheet__item info-sheet__item--button" type="button" data-wifi-copy>
               <span class="info-sheet__left">
                 <i class="fa-solid fa-wifi"></i>
                 <span>sampcamping</span>
@@ -133,7 +133,7 @@
               <span class="info-sheet__right">
                 <i class="fa-regular fa-copy"></i>
               </span>
-            </a>
+            </button>
             <a class="info-sheet__item" href="https://maps.app.goo.gl/fJqCFSFbbkPi4fih9" target="_blank" rel="noreferrer">
               <span class="info-sheet__left">
                 <i class="fa-solid fa-location-dot"></i>
@@ -169,6 +169,16 @@
               </span>
               <span class="info-sheet__right">&#8250;</span>
             </button>
+          </div>
+        </div>
+
+        <div class="app-toast-stack" aria-live="polite" aria-atomic="true">
+          <div id="app-toast" class="app-toast app-toast--success" role="status" hidden>
+            <div class="app-toast__icon" aria-hidden="true">✓</div>
+            <div class="app-toast__content">
+              <p id="app-toast-message" class="app-toast__message"></p>
+            </div>
+            <button id="app-toast-close" class="app-toast__close" type="button" aria-label="Đóng thông báo">×</button>
           </div>
         </div>
       </form>

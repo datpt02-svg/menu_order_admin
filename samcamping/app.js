@@ -2145,6 +2145,9 @@ const zaloModalTitle = document.querySelector("#zalo-modal-title");
 const zaloModalDesc = document.querySelector("#zalo-modal-desc");
 const zaloOpenLink = document.querySelector("#zalo-open-link");
 const zaloDownloadLink = document.querySelector("#zalo-download-link");
+const appToast = document.querySelector("#app-toast");
+const appToastMessage = document.querySelector("#app-toast-message");
+const appToastClose = document.querySelector("#app-toast-close");
 
 const DEFAULT_BOOKING_CONFIG = {
   depositAmount: 100000,
@@ -2152,6 +2155,7 @@ const DEFAULT_BOOKING_CONFIG = {
   bankCode: "MB",
   accountNumber: "09680881",
   phone: "09680881",
+  wifiPassword: "",
 };
 
 const state = {
@@ -2762,6 +2766,7 @@ async function loadBookingConfig() {
     bankCode: String(config?.bankCode || DEFAULT_BOOKING_CONFIG.bankCode),
     accountNumber: String(config?.accountNumber || DEFAULT_BOOKING_CONFIG.accountNumber),
     phone: String(config?.phone || DEFAULT_BOOKING_CONFIG.phone),
+    wifiPassword: String(config?.wifiPassword || DEFAULT_BOOKING_CONFIG.wifiPassword),
   };
 }
 
@@ -3165,16 +3170,69 @@ function isMobileCallDevice() {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator.userAgent || "");
 }
 
+let toastTimer = 0;
+
+function hideToast() {
+  if (!(appToast instanceof HTMLElement)) return;
+
+  appToast.classList.remove("is-visible");
+  window.setTimeout(() => {
+    if (!appToast.classList.contains("is-visible")) {
+      appToast.hidden = true;
+    }
+  }, 180);
+}
+
+function showToast(message, type = "success") {
+  if (!(appToast instanceof HTMLElement) || !(appToastMessage instanceof HTMLElement)) return;
+
+  const normalizedMessage = String(message || "").trim();
+  if (!normalizedMessage) return;
+
+  appToastMessage.textContent = normalizedMessage;
+  appToast.hidden = false;
+  appToast.classList.remove("app-toast--success", "app-toast--error");
+  appToast.classList.add(type === "error" ? "app-toast--error" : "app-toast--success");
+  appToast.classList.add("is-visible");
+
+  if (toastTimer) {
+    window.clearTimeout(toastTimer);
+  }
+
+  toastTimer = window.setTimeout(() => {
+    hideToast();
+  }, 5000);
+}
+
+if (appToastClose instanceof HTMLElement) {
+  appToastClose.addEventListener("click", () => {
+    if (toastTimer) {
+      window.clearTimeout(toastTimer);
+    }
+    hideToast();
+  });
+}
+
+async function copyText(value) {
+  const normalizedValue = String(value || "").trim();
+  if (!normalizedValue) return false;
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(normalizedValue);
+      return true;
+    }
+  } catch {}
+
+  return false;
+}
+
 async function handleHistoryCall(phone) {
   const normalizedPhone = String(phone || "").trim() || DEFAULT_BOOKING_CONFIG.phone;
   const telLink = `tel:${normalizedPhone}`;
 
   const copyPhone = async () => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(normalizedPhone);
-      }
-    } catch {}
+    await copyText(normalizedPhone);
   };
 
   try {
@@ -4668,6 +4726,7 @@ document.addEventListener("click", (event) => {
   const bookingCloseButton = target.closest("[data-booking-close]");
   const historyPaymentLink = target.closest("[data-history-payment]");
   const historyCallButton = target.closest("[data-history-call]");
+  const wifiCopyButton = target.closest("[data-wifi-copy]");
   const historyResubmitButton = target.closest("[data-history-resubmit]");
   const historyMoreButton = target.closest("[data-history-more]");
   const bookingCancelButton = target.closest("[data-booking-cancel]");
@@ -4791,6 +4850,17 @@ document.addEventListener("click", (event) => {
 
   if (historyCallButton instanceof HTMLElement) {
     handleHistoryCall(historyCallButton.dataset.historyCall || "");
+    return;
+  }
+
+  if (wifiCopyButton instanceof HTMLElement) {
+    copyText(getBookingConfig().wifiPassword || DEFAULT_BOOKING_CONFIG.wifiPassword)
+      .then((copied) => {
+        showToast(copied ? "Đã copy mật khẩu Wi‑Fi" : "Chưa copy được mật khẩu Wi‑Fi", copied ? "success" : "error");
+      })
+      .catch(() => {
+        showToast("Chưa copy được mật khẩu Wi‑Fi", "error");
+      });
     return;
   }
 

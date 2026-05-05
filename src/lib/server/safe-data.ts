@@ -121,6 +121,7 @@ export async function safeBookingConfig() {
         bankCode: data.bankCode,
         accountNumber: data.accountNumber,
         phone: data.phone,
+        wifiPassword: data.wifiPassword,
       },
       usingFallback: false,
     };

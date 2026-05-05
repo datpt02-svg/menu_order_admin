@@ -170,6 +170,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   const [statusFormError, setStatusFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null);
+  const [bookingModalMode, setBookingModalMode] = useState<"form" | "deposit">("form");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
@@ -355,6 +356,8 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
   const handleBookingModalClose = () => {
     setFieldErrors({});
     setFormError(null);
+    setSelectedBooking(null);
+    setBookingModalMode("form");
     setIsModalOpen(false);
   };
 
@@ -362,6 +365,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
     setFieldErrors({});
     setFormError(null);
     setSelectedBooking(booking);
+    setBookingModalMode("form");
     setIsModalOpen(true);
   };
 
@@ -369,6 +373,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
     setFieldErrors({});
     setFormError(null);
     setSelectedBooking(null);
+    setBookingModalMode("form");
     setIsModalOpen(true);
   };
 
@@ -376,6 +381,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
     setFieldErrors({});
     setFormError(null);
     setSelectedBooking(booking);
+    setBookingModalMode("deposit");
     setIsModalOpen(true);
   };
 
@@ -650,12 +656,12 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
         <Modal
           isOpen={isModalOpen}
           onClose={handleBookingModalClose}
-          title={selectedBooking && canOpenDepositBill(selectedBooking)
+          title={bookingModalMode === "deposit" && selectedBooking && canOpenDepositBill(selectedBooking)
             ? (isDepositReviewPending(selectedBooking) ? "Xác nhận bill cọc" : "Xem bill cọc")
             : selectedBooking ? "Chi tiết Booking" : "Thêm Booking mới"}
-          className={selectedBooking && canOpenDepositBill(selectedBooking) ? "max-w-4xl" : undefined}
+          className={bookingModalMode === "deposit" && selectedBooking && canOpenDepositBill(selectedBooking) ? "max-w-4xl" : undefined}
         >
-          {selectedBooking && canOpenDepositBill(selectedBooking) ? (
+          {bookingModalMode === "deposit" && selectedBooking && canOpenDepositBill(selectedBooking) ? (
             <div className="space-y-6">
               {formError ? (
                 <div className="rounded-[16px] border border-[rgba(159,75,62,0.18)] bg-[rgba(159,75,62,0.08)] px-4 py-3 text-sm text-[#8a3527]">
