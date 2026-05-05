@@ -3218,13 +3218,32 @@ async function copyText(value) {
   if (!normalizedValue) return false;
 
   try {
-    if (navigator.clipboard?.writeText) {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
       await navigator.clipboard.writeText(normalizedValue);
       return true;
     }
   } catch {}
 
-  return false;
+  const textarea = document.createElement("textarea");
+  textarea.value = normalizedValue;
+  textarea.setAttribute("readonly", "readonly");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
 }
 
 async function handleHistoryCall(phone) {
