@@ -496,7 +496,12 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                 </div>
               }
             />
-            <div className="overflow-x-auto admin-scrollbar">
+            <div className="relative overflow-x-auto admin-scrollbar">
+              {paginatedBookings.length === 0 ? (
+                <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 -translate-y-1/2 px-4 text-center text-sm text-[var(--muted)]">
+                  Không tìm thấy booking nào khớp bộ lọc hiện tại.
+                </div>
+              ) : null}
               <table className="min-w-full table-fixed text-sm">
                 <colgroup>
                   <col className="w-[9rem]" />
@@ -633,11 +638,28 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
                       ))}
                     </>
                   ) : (
-                    <tr>
-                      <td colSpan={7} className="py-4 text-center text-sm text-[var(--muted)]">
-                        Không tìm thấy booking nào khớp bộ lọc hiện tại.
-                      </td>
-                    </tr>
+                    <>
+                      {Array.from({ length: BOOKING_ROWS_PER_PAGE }).map((_, index) => (
+                        <tr key={`booking-empty-state-${index}`} className="border-b border-[color:rgba(63,111,66,0.08)] last:border-0" aria-hidden="true">
+                          <td className="py-4 pr-4"><span className="invisible">-</span></td>
+                          <td className="py-4 pr-4"><div className="invisible">-</div><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4"><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4"><div className="invisible">-</div><div className="invisible">-</div></td>
+                          <td className="py-4 pr-4">
+                            <div className="invisible">-</div>
+                            <div className="invisible mt-2"><Badge>Fake</Badge></div>
+                          </td>
+                          <td className="py-4 pr-4">
+                            <div className="invisible h-9">-</div>
+                          </td>
+                          <td className="py-4 pr-4 text-right">
+                            <div className="invisible flex justify-end gap-2">
+                              <Button variant="ghost" size="icon-sm">-</Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
                   )}
                 </tbody>
               </table>
