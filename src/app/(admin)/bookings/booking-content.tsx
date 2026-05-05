@@ -243,6 +243,7 @@ export function BookingContent({ initialData, highlightedBookingId }: BookingCon
       setFormError(null);
       setActiveHighlightId(requestedDepositReviewBookingId);
       setSelectedBooking(booking ?? null);
+      setBookingModalMode("deposit");
       setIsModalOpen(true);
     }, 0);
     return () => window.clearTimeout(timer);
