@@ -2134,8 +2134,14 @@ const languageModalTitle = document.querySelector("#language-modal-title");
 const brandStoryText = document.querySelector("#brand-story-text");
 const infoTitle = document.querySelector("#info-title");
 const infoDescription = document.querySelector("#info-description");
+const infoWifiLabel = document.querySelector("#info-wifi-label");
+const infoMapsLink = document.querySelector("#info-maps-link");
 const infoMapsLabel = document.querySelector("#info-maps-label");
+const infoPhoneLink = document.querySelector("#info-phone-link");
+const infoPhoneLabel = document.querySelector("#info-phone-label");
+const infoFacebookLink = document.querySelector("#info-facebook-link");
 const infoFacebookLabel = document.querySelector("#info-facebook-label");
+const infoTiktokLink = document.querySelector("#info-tiktok-link");
 const infoTiktokLabel = document.querySelector("#info-tiktok-label");
 const infoZaloLabel = document.querySelector("#info-zalo-label");
 const categoryHeading = document.querySelector("#category-heading");
@@ -2149,13 +2155,23 @@ const appToast = document.querySelector("#app-toast");
 const appToastMessage = document.querySelector("#app-toast-message");
 const appToastClose = document.querySelector("#app-toast-close");
 
+const WIFI_PASSWORD = String(window.SAM_WIFI_PASSWORD || "sampcamping");
+const SAM_PHONE = String(window.SAM_PHONE || "0968088189");
+const SAM_DEPOSIT_AMOUNT = Number(window.SAM_DEPOSIT_AMOUNT) || 100000;
+const SAM_BANK_NAME = String(window.SAM_BANK_NAME || "SHB");
+const SAM_BANK_CODE = String(window.SAM_BANK_CODE || "SHB");
+const SAM_ACCOUNT_NUMBER = String(window.SAM_ACCOUNT_NUMBER || "0963574234");
+const SAM_FACEBOOK_URL = String(window.SAM_FACEBOOK_URL || "https://facebook.com");
+const SAM_TIKTOK_URL = String(window.SAM_TIKTOK_URL || "https://tiktok.com");
+const SAM_GOOGLE_MAPS_URL = String(window.SAM_GOOGLE_MAPS_URL || "https://maps.app.goo.gl/fJqCFSFbbkPi4fih9");
+
 const DEFAULT_BOOKING_CONFIG = {
-  depositAmount: 100000,
-  bankName: "MBBank",
-  bankCode: "MB",
-  accountNumber: "09680881",
-  phone: "09680881",
-  wifiPassword: "",
+  depositAmount: SAM_DEPOSIT_AMOUNT,
+  bankName: SAM_BANK_NAME,
+  bankCode: SAM_BANK_CODE,
+  accountNumber: SAM_ACCOUNT_NUMBER,
+  phone: SAM_PHONE,
+  wifiPassword: WIFI_PASSWORD,
 };
 
 const state = {
@@ -2768,6 +2784,10 @@ async function loadBookingConfig() {
     phone: String(config?.phone || DEFAULT_BOOKING_CONFIG.phone),
     wifiPassword: String(config?.wifiPassword || DEFAULT_BOOKING_CONFIG.wifiPassword),
   };
+
+  if (infoWifiLabel instanceof HTMLElement) {
+    infoWifiLabel.textContent = WIFI_PASSWORD;
+  }
 }
 
 async function loadWaiterZones() {
@@ -4526,8 +4546,13 @@ function renderStaticText() {
   infoTitle.textContent = locale.infoTitle;
   infoDescription.textContent = locale.infoDescription;
   if (infoMapsLabel) infoMapsLabel.textContent = "Google Maps";
+  if (infoMapsLink instanceof HTMLAnchorElement) infoMapsLink.href = SAM_GOOGLE_MAPS_URL;
+  if (infoPhoneLabel) infoPhoneLabel.textContent = SAM_PHONE;
+  if (infoPhoneLink instanceof HTMLAnchorElement) infoPhoneLink.href = `tel:${SAM_PHONE}`;
   if (infoFacebookLabel) infoFacebookLabel.textContent = "Facebook";
+  if (infoFacebookLink instanceof HTMLAnchorElement) infoFacebookLink.href = SAM_FACEBOOK_URL;
   if (infoTiktokLabel) infoTiktokLabel.textContent = "Tiktok";
+  if (infoTiktokLink instanceof HTMLAnchorElement) infoTiktokLink.href = SAM_TIKTOK_URL;
   if (infoZaloLabel) infoZaloLabel.textContent = locale.zaloConnect;
   categoryHeading.textContent = locale.categoryHeading;
   languageLabel.textContent = locale.languageName;
@@ -4873,9 +4898,13 @@ document.addEventListener("click", (event) => {
   }
 
   if (wifiCopyButton instanceof HTMLElement) {
-    copyText(getBookingConfig().wifiPassword || DEFAULT_BOOKING_CONFIG.wifiPassword)
+    copyText(WIFI_PASSWORD)
       .then((copied) => {
-        showToast(copied ? "Đã copy mật khẩu Wi‑Fi" : "Chưa copy được mật khẩu Wi‑Fi", copied ? "success" : "error");
+        if (copied === false) {
+          showToast("Chưa copy được mật khẩu Wi‑Fi", "error");
+          return;
+        }
+        showToast("Đã copy mật khẩu Wi‑Fi", "success");
       })
       .catch(() => {
         showToast("Chưa copy được mật khẩu Wi‑Fi", "error");

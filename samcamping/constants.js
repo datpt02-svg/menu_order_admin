@@ -1,0 +1,9 @@
+window.SAM_WIFI_PASSWORD = "sampcamping";
+window.SAM_PHONE = "0968088189";
+window.SAM_DEPOSIT_AMOUNT = 100000;
+window.SAM_BANK_NAME = "SHB";
+window.SAM_BANK_CODE = "SHB";
+window.SAM_ACCOUNT_NUMBER = "0963574234";
+window.SAM_FACEBOOK_URL = "https://facebook.com/samcamtrai";
+window.SAM_TIKTOK_URL = "https://www.tiktok.com/@samcampinghaiphong";
+window.SAM_GOOGLE_MAPS_URL = "https://maps.app.goo.gl/fJqCFSFbbkPi4fih9";
