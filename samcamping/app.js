@@ -4575,21 +4575,27 @@ async function loadMenuSections() {
   const result = await response.json();
   const nextSections = Array.isArray(result?.sections) ? result.sections : [];
   sections = nextSections;
-  if (!sections.find((section) => section.id === state.activeSection)) {
-    state.activeSection = sections[0]?.id || "";
+  const mainMenuSections = getMainMenuSections();
+  if (!mainMenuSections.find((section) => section.id === state.activeSection)) {
+    state.activeSection = mainMenuSections[0]?.id || "";
   }
   if (state.selectedItemId && !findItem(state.selectedItemId)) {
     state.selectedItemId = null;
   }
 }
 
+function getMainMenuSections() {
+  return sections.filter((section) => section.id !== "tap-hoa-sam-thi");
+}
+
 function renderCategories() {
-  if (sections.length === 0) {
+  const mainMenuSections = getMainMenuSections();
+  if (mainMenuSections.length === 0) {
     categoryList.innerHTML = "";
     return;
   }
 
-  categoryList.innerHTML = sections
+  categoryList.innerHTML = mainMenuSections
     .map(
       (section) => `
         <button
@@ -4606,12 +4612,13 @@ function renderCategories() {
 
 function renderSections() {
   const locale = locales[state.locale];
-  if (sections.length === 0) {
+  const mainMenuSections = getMainMenuSections();
+  if (mainMenuSections.length === 0) {
     menuRoot.innerHTML = "";
     return;
   }
 
-  menuRoot.innerHTML = sections
+  menuRoot.innerHTML = mainMenuSections
     .map(
       (section) => `
         <section class="menu-group" id="${section.id}">

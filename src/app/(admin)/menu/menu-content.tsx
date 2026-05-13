@@ -378,16 +378,10 @@ export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] 
         <form ref={formRef} action={onSave} className="space-y-4">
           {formError ? <div data-form-error className="rounded-[16px] border border-[rgba(159,75,62,0.18)] bg-[rgba(159,75,62,0.08)] px-4 py-3 text-sm text-[#8a3527]">{formError}</div> : null}
           {modalState?.type === "section" && selectedSection ? (
-            <>
-              <input type="hidden" name="id" value={selectedSection.id} />
-              <input type="hidden" name="slug" value={selectedSection.slug} />
-            </>
+            <input type="hidden" name="id" value={selectedSection.id} />
           ) : null}
           {modalState?.type === "item" && selectedItem ? (
-            <>
-              <input type="hidden" name="id" value={selectedItem.id} />
-              <input type="hidden" name="slug" value={selectedItem.slug} />
-            </>
+            <input type="hidden" name="id" value={selectedItem.id} />
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -397,6 +391,11 @@ export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] 
                   <FieldLabel>Tên nhóm món (vi)</FieldLabel>
                   <Input name="titleVi" defaultValue={selectedSection?.titleI18n.vi || ""} invalid={Boolean(fieldErrors.titleVi)} />
                   <FieldError>{fieldErrors.titleVi}</FieldError>
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Mã định danh (Slug)</FieldLabel>
+                  <Input name="slug" defaultValue={selectedSection?.slug || ""} invalid={Boolean(fieldErrors.slug)} placeholder="Hệ thống tự tạo nếu để trống" />
+                  <FieldError>{fieldErrors.slug}</FieldError>
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Mô tả (vi)</FieldLabel>
@@ -427,6 +426,11 @@ export function MenuContent({ sections }: { sections: MenuSectionWithItemsRow[] 
                   <FieldLabel>Tên món (vi)</FieldLabel>
                   <Input name="nameVi" defaultValue={selectedItem?.nameI18n.vi || ""} invalid={Boolean(fieldErrors.nameVi)} />
                   <FieldError>{fieldErrors.nameVi}</FieldError>
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Mã định danh (Slug)</FieldLabel>
+                  <Input name="slug" defaultValue={selectedItem?.slug || ""} invalid={Boolean(fieldErrors.slug)} placeholder="Hệ thống tự tạo nếu để trống" />
+                  <FieldError>{fieldErrors.slug}</FieldError>
                 </div>
                 <div>
                   <FieldLabel>Giá hiển thị</FieldLabel>
