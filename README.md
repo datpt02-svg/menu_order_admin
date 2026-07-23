@@ -1,8 +1,78 @@
-# Sam Camping Admin & Booking Platform
+# Sam Camping Operations & Booking Management Platform
 
-A full-stack management platform for Sam Camping, combining an operations dashboard, public booking APIs, real-time waiter requests, multilingual menu management, and a customer-facing website.
+Sam Camping is a full-stack operations platform for managing the daily activities of a hospitality venue from one central system. It connects a customer-facing website with an internal administration dashboard, backend APIs, a PostgreSQL database, and real-time staff notifications.
 
-The backend and admin dashboard are built with Next.js and PostgreSQL. A lightweight static customer website is included in the `samcamping` directory and can communicate with the backend through the included Nginx reverse proxy.
+The repository is intended for venues such as camping sites, restaurants, cafés, or service-based hospitality businesses that need to manage bookings, tables, services, menus, customer requests, deposits, translations, and staff schedules in a coordinated way.
+
+## What This Repository Is For
+
+This project provides two connected applications:
+
+1. **A customer-facing website** where visitors can view information, interact with available services, submit bookings, and send service requests.
+2. **An internal administration system** where managers and staff can review bookings, assign tables, process deposits, maintain menus and services, respond to waiter requests, manage translations, and organize staff shifts.
+
+Both applications use the same backend and database, so information entered by customers can be handled directly by the operations team without being copied manually between separate tools.
+
+## Project Purpose
+
+The main purpose of this repository is to create a single operational source of truth for Sam Camping.
+
+Instead of managing different parts of the business through disconnected spreadsheets, messages, static website content, and manual records, the platform brings them together in one system:
+
+- Customer booking data is stored and tracked centrally.
+- Booking and deposit statuses follow a defined workflow.
+- Zones and tables can be managed alongside reservations.
+- Waiter requests are delivered to staff in real time.
+- Menu items, services, prices, images, and visibility can be updated from the admin system.
+- Multilingual content can be maintained and exported consistently.
+- Staff members, shifts, and assignments can be planned in the same application.
+
+## Problems It Solves
+
+### 1. Fragmented booking management
+
+Bookings can otherwise arrive through several channels and be tracked manually. This project stores each booking in a structured database, records status changes, supports table assignment, and keeps a history of the booking lifecycle.
+
+### 2. Manual deposit verification
+
+Customers may submit deposit evidence that staff need to review. The platform stores the submitted deposit slip and provides explicit review states such as submitted, approved, or rejected.
+
+### 3. Slow communication between customers and staff
+
+Customer service requests can be missed when they depend only on verbal communication or messaging applications. Socket.IO is used to deliver waiter requests and status updates to the operations interface in real time.
+
+### 4. Inconsistent menu and service information
+
+When menu items, services, prices, images, or availability are maintained directly in static website files, updates are difficult to control. The administration dashboard provides structured management for this content and exposes it through backend APIs.
+
+### 5. Repeated multilingual content updates
+
+The system stores locale keys and translations centrally, allowing translated content to be edited, published, and exported without duplicating translation logic across the customer website.
+
+### 6. Disconnected staff scheduling
+
+Managers can maintain staff profiles, shift templates, scheduled shifts, and staff assignments in the same platform used for bookings and venue operations.
+
+### 7. Difficult local and self-hosted deployment
+
+The repository includes Docker Compose, database setup automation, persistent volumes, and an Nginx reverse proxy so the customer website, admin application, API, real-time server, and PostgreSQL database can be started as one stack.
+
+## Intended Users
+
+- **Venue managers** — monitor bookings, deposits, tables, services, and staffing.
+- **Reception or cashier staff** — review reservations and customer deposit information.
+- **Service staff** — receive and process waiter requests.
+- **Content administrators** — maintain services, menu items, images, and translations.
+- **Developers and operators** — integrate the public website, run migrations, and deploy the platform.
+
+## Typical Operational Flow
+
+1. A customer uses the public website to submit a booking.
+2. The booking is stored in PostgreSQL and appears in the admin dashboard.
+3. Staff review the booking and any submitted deposit slip.
+4. A zone or table is assigned and the booking moves through its status workflow.
+5. During the visit, customer service requests are sent to staff in real time.
+6. Managers update services, menus, translations, and staff schedules from the same administration system.
 
 ## Features
 
